@@ -14,14 +14,17 @@ On PowerShell, run `$env:LABFIX_DEMO = '1'` before `npm start`. Open [http://127
 
 ### Walkthrough
 
-1. Open **Operator desk** and select **PC-17** in **Innovation Lab**. Three sample reports show the original incident, post-repair recurrence and duplicate report. The repair note remains visible.
-2. Use **Report a fault** to submit “last row seat 5 off hoy every few minutes” in that lab. The receipt confirms that it linked to the active incident.
-3. Resolve the incident with a repair note and submit “পিসি ১৭ বারবার বন্ধ হয়ে যায়.” Refresh the operator desk to see it reopened with a new recurrence.
-4. Submit “The screen is blank near the window.” The report goes to **Needs review**. The operator can confirm the asset and fault or merge the report into an existing active incident.
+1. Open **Report** in **Innovation Lab**. The map identifies workstations with an active incident or a post-repair recurrence. Try the Bangla and Banglish example buttons to see how the same workstation and fault are identified before submitting.
+2. Submit a report and choose **Track this report**. The private receipt shows status updates without exposing repair notes or student report text. Save the code to reopen the receipt later.
+3. In **Operator desk**, search for **PC-17**. Open its repair history and triage checklist. Assign it to Hardware, set its priority, and resolve it with a note. A matching report submitted within 30 days reopens the incident. The original receipt follows the new status.
+4. Submit “The screen is blank near the window.” Confirm the location or merge it into an active incident from the **Needs review** queue. A merged report retains its receipt and history.
+5. Open **Analytics** for daily report volume, fault categories, and workstations ordered by recurrence. Export the currently filtered queue as a CSV of incident metadata.
+
+The desktop and mobile layouts use the same controls. Motion follows the browser’s reduced-motion preference. Demo dates and reports are synthetic. Use the full production mode below for actual campus data.
 
 ## Deployment
 
-Production mode requires a shared operator token of at least 24 characters. Students can submit reports without a token. Operators enter the token in the desk, where it is retained only for that page session. The server gates incident listings, descriptions, and edits. For real operations, keep student access on a campus network or behind the institution's gateway, and terminate HTTPS at the reverse proxy. No individual staff accounts are included.
+Production mode requires a shared operator token of at least 24 characters. Students can submit reports without a token and track only a specific receipt using its random 24-character code. Operators enter the token in the desk, where it is retained only for that page session. The server gates incident listings, descriptions, and edits. For real operations, keep student access on a campus network or behind the institution's gateway, and terminate HTTPS at the reverse proxy. No individual staff accounts are included.
 
 ### Docker Compose
 
@@ -46,6 +49,7 @@ The API rate limit uses direct source IP addresses. Behind a campus reverse prox
 - **Report intake.** Unicode normalization handles Bangla digits. A workstation ID or row/seat clue is matched against the lab's inventory. Conflicting clues go to the review queue.
 - **Multilingual NLP.** The fault scorer combines multilingual lexical and phrase evidence with character-trigram cosine similarity against labelled examples. A minimum score and a lead over the next class are required for automatic classification. The model is lightweight and uses manually written examples.
 - **Incident matching.** A known workstation and fault class can link a report only within the same lab. Active incidents take priority. When a matching issue returns within 30 days of resolution, LabFix reopens that incident and increments its recurrence count. A report in the same category can represent a distinct underlying failure. Repair staff own that decision.
+- **Operator workflow.** Priorities and assignments are persisted and logged. The operator can use the fault checklist and past repairs on the same machine to triage similar incidents. Analytics include the last 14 UTC days and all-time fault and recurrence counts. Queue filters and export operate on the 250 most recently updated incidents.
 - **Persistence.** SQLite transactions commit the report, incident state, and history together. Retry keys keep repeated submissions from creating duplicate records. Operator merges retain the reports and timeline. Uncertain reports stay in an explicit review state.
 - **Privacy.** The intake asks for an issue description, with no student name or contact field. The public API returns a receipt without exposing existing report text. Operators should establish a retention period before collecting real reports.
 
@@ -56,16 +60,18 @@ npm test
 npm run evaluate
 ```
 
-The 30-case fixture suite contains English, Bangla, and Banglish examples, including missing locations and conflicting clues. The simple baseline uses explicit workstation IDs and keyword-only scoring for ASCII reports. The multilingual system adds row/seat parsing, bilingual lexical coverage, and trigram similarity. The comparison measures these changes together. `eval/results.json` contains the outputs and errors per example.
+Run `npm run evaluate -- --challenge` to reproduce the second evaluation. Both fixture sets contain authored English, Bangla, and Banglish reports, including missing locations, competing workstation clues, and ambiguous fault terms. Both are supplied with per-case outputs. They do not come from live lab logs.
 
-| Metrics on authored fixtures | Baseline | LabFix |
-| --- | ---: | ---: |
-| Correct workstation or abstention | 22/30 | 30/30 |
-| Correct fault or abstention | 18/30 | 26/30 |
-| Exact workstation and fault pair | 11/30 | 26/30 |
-| Incorrect automatic-link candidates | 1 | 0 |
+| Evaluation | ASCII keyword baseline | Multilingual lexical rules | Hybrid matcher |
+| --- | ---: | ---: | ---: |
+| Original examples, exact workstation and fault | 11/30 | 26/30 | 26/30 |
+| Challenge set, exact workstation and fault | 13/24 | 22/24 | 22/24 |
+| Original examples, incorrect automatic-link candidates | 1 | 1 | 0 |
+| Challenge set, incorrect automatic-link candidates | 0 | 0 | 0 |
 
-Zero incorrect candidates in this small fixture set does not establish a deployment error rate. Four fault identifications were missed. No campus pilot or student dataset was used. Tests cover repair and recurrence, lab and fault isolation, durable storage, authorization, and operator merge behavior. No LLM inference runs in the application.
+The ablation uses the same workstation parser and multilingual rules with character similarity removed. The hybrid matcher did not improve exact accuracy over that ablation. It did turn one incorrect automatic-link candidate in the original set into a review case. The two challenge misses were sent to review. These small sets cannot establish a campus false-merge rate. No campus pilot, live student dataset, or LLM inference was used.
+
+The browser walkthrough verified report submission, receipt tracking, incident detail and repair history, and analytics. The API integration test also verifies that a receipt follows an operator change and a subsequent merge. Docker was not available for a container smoke test.
 
 A pilot could start in one lab and compare first-pass report routing against lab-operator labels. Report joint accuracy, false merges, operator review rate, and time to triage, with a split by language and a separate split by collection week.
 
@@ -83,4 +89,4 @@ A pilot could start in one lab and compare first-pass report routing against lab
 
 ### Portfolio description
 
-LabFix is a full-stack multilingual maintenance prototype that links English, Bangla, and Banglish reports to campus workstations and tracks post-repair recurrences. Its matching engine was benchmarked against a keyword baseline on 30 authored cases. Describe your individual contributions accurately when presenting the project.
+LabFix is a full-stack multilingual maintenance prototype that links English, Bangla, and Banglish reports to campus workstations and tracks post-repair recurrences. Its matching engine was evaluated against keyword and multilingual lexical baselines on 54 authored cases, with separate reporting for the challenge set. Describe your individual contributions accurately when presenting the project.
