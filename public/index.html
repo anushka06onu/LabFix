@@ -3,42 +3,70 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="Report and track shared computer lab maintenance.">
-<title>LabFix · Workstation maintenance</title><link rel="stylesheet" href="/app.css">
+<title>LabFix | Campus maintenance</title><link rel="stylesheet" href="/app.css">
 </head>
 <body>
+<a class="skip" href="#main">Skip to workspace</a>
 <header><div class="top">
-<a href="/" class="brand"><span class="mark" aria-hidden="true">LF</span>LabFix</a>
-<nav aria-label="Workspace"><button id="reportTab" aria-pressed="true">Report a fault</button><button id="opsTab" aria-pressed="false">Operator desk</button></nav>
+<a href="/" class="brand"><span class="mark" aria-hidden="true">↯</span><span>Lab<span class="accent">Fix</span></span></a>
+<nav aria-label="Workspace">
+<button id="reportTab" aria-pressed="true">Report</button><button id="trackTab" aria-pressed="false">Track</button><button id="opsTab" aria-pressed="false">Operator desk</button>
+</nav>
+<span id="environment" class="environment" hidden>Demo workspace</span>
 </div></header>
-<main>
-<section class="hero"><div><p id="context" class="eyebrow">Computer lab maintenance</p><h1 id="title">Get a workstation fixed.</h1><p id="intro">Report a problem in English, বাংলা, or Banglish. A lab operator can use your report to trace the issue and its repair history.</p></div><label for="lab">Computer lab<select id="lab" disabled></select></label></section>
+<main id="main">
+<section class="hero" aria-labelledby="title">
+<div class="hero-copy"><p id="context" class="eyebrow">CAMPUS LAB MAINTENANCE</p><h1 id="title">Get a workstation <em>back online.</em></h1><p id="intro">Choose a PC or describe what happened in English, বাংলা, or Banglish. You’ll get a private code to follow the repair.</p></div>
+<div class="hero-art" aria-hidden="true"><i></i><i></i><i></i><i></i><div class="hero-screen"><b>↯</b></div></div>
+<div class="hero-tool"><label for="lab">Lab location<select id="lab" disabled></select></label></div>
+</section>
 <p id="globalMessage" aria-live="polite"></p>
 <section id="reportView" class="layout">
-<article class="panel">
-<h2>Pick a workstation</h2><p class="muted">Use the map or mention the PC number in your report.</p>
-<div class="board">Teaching desk</div><div id="assetMap" class="asset-map" aria-label="Workstation map"></div>
-<button id="clearAsset" class="quiet" type="button">Clear workstation selection</button>
+<article class="panel map-panel" aria-labelledby="mapTitle">
+<div class="heading"><div><h2 id="mapTitle">Workstation map</h2><p class="muted">Select the seat where the issue occurred.</p></div><span id="mapCount" class="caption"></span></div>
+<div class="map-surface"><div class="board">Teaching desk</div><div id="assetMap" class="asset-map" aria-label="Workstation map"></div></div>
+<div class="map-footer"><ul class="legend"><li><i></i>No open incident</li><li><i></i>Open incident</li><li><i></i>Recurring fault</li></ul><button id="clearAsset" class="quiet subtle" type="button">Clear selection</button></div>
 </article>
-<form id="reportForm" class="panel">
-<h2>Describe the problem</h2><p id="assetChoice" class="muted" aria-live="polite">Workstation unknown</p>
-<label for="description">What happened? Leave out names and contact details.</label>
-<textarea id="description" minlength="8" maxlength="600" rows="5" required placeholder="PC 17 বারবার বন্ধ হয়ে যায়"></textarea>
-<div class="actions"><button class="primary" type="submit">Send report</button></div>
-<p id="receipt" class="feedback" role="status"></p>
+<form id="reportForm" class="panel report-panel">
+<h2>New fault report</h2><p id="assetChoice" class="muted" aria-live="polite">Workstation unconfirmed</p>
+<label for="description">What happened?</label>
+<textarea id="description" minlength="8" maxlength="600" rows="4" required placeholder="Example: PC 17 বারবার বন্ধ হয়ে যায়"></textarea>
+<div class="between"><span class="caption">Leave out names and contact details.</span><span id="characterCount" class="caption">0 / 600</span></div>
+<div class="examples" aria-label="Try an example"><button class="quiet subtle" type="button" data-example="PC 17 keeps restarting during class.">English</button><button class="quiet subtle" type="button" data-example="পিসি ১৭ বারবার বন্ধ হয়ে যায়">বাংলা</button><button class="quiet subtle" type="button" data-example="last row seat 5 off hoy every few minutes">Banglish</button></div>
+<div id="preview" class="prediction" hidden><div class="prediction-icon" aria-hidden="true">✧</div><div><b>Match preview</b><p id="predictionText"></p><small id="predictionClue"></small></div></div>
+<div class="actions"><button class="primary" type="submit">Send report <span aria-hidden="true">↗</span></button></div>
+<div id="receipt" class="feedback" role="status"></div>
+</form>
+</section>
+<section id="trackView" hidden>
+<form id="trackForm" class="panel tracking">
+<h2>Track a report</h2><p class="muted">Enter the private code shown on your receipt.</p>
+<label for="trackCode">Tracking code</label><input id="trackCode" maxlength="24" autocomplete="off" required spellcheck="false">
+<button class="primary">Check status</button>
+<div id="trackResult" class="feedback" role="status"></div>
 </form>
 </section>
 <section id="operatorView" hidden>
-<form id="login" class="panel"><h2>Operator access</h2><label for="token">Operator token</label><input id="token" type="password" required autocomplete="off"><button class="primary">Unlock desk</button><p id="loginMessage" role="status"></p></form>
+<form id="login" class="panel tracking"><h2>Operator access</h2><label for="token">Operator token</label><input id="token" type="password" required autocomplete="off"><button class="primary">Unlock desk</button><p id="loginMessage" role="status"></p></form>
 <div id="desk" hidden>
-<div id="metrics" class="metrics"></div>
-<div class="operator-grid">
-<section class="panel queue"><div class="heading"><div><h2>Incident queue</h2><p class="muted">Most recently updated incidents</p></div><button class="quiet" id="refresh">Refresh</button></div>
-<label for="filter">Status<select id="filter"><option value="all">All incidents</option><option value="open">Open</option><option value="working">In progress</option><option value="review">Needs review</option><option value="resolved">Resolved</option></select></label>
+<div id="metrics" class="metrics" aria-label="Lab metrics"></div>
+<div class="desk-toolbar"><div class="segmented" aria-label="Operator view"><button id="queueTab" aria-pressed="true">Incident queue</button><button id="analyticsTab" aria-pressed="false">Analytics</button></div><div class="examples"><button class="quiet" id="refresh">Refresh</button><button class="quiet" id="export">Export queue CSV</button></div></div>
+<div class="operator-grid" id="queueView">
+<section class="panel queue"><div class="heading"><div><h2>Incidents</h2><p id="queueCount" class="muted"></p></div></div>
+<label for="search">Search by workstation, fault, or assignee<input id="search" type="search" placeholder="PC-17, power, hardware…"></label>
+<div class="edit-grid"><label for="filter">Status<select id="filter"><option value="all">All statuses</option><option value="open">Open</option><option value="working">In progress</option><option value="review">Needs review</option><option value="resolved">Resolved</option></select></label>
+<label for="order">Sort<select id="order"><option value="priority">Priority first</option><option value="recent">Most recent</option><option value="repeat">Most recurrences</option></select></label></div>
 <div id="queue"></div></section>
 <section class="panel" id="detail" aria-label="Incident detail"><h2>Incident detail</h2><p class="muted">Select an incident to view reports and repair history.</p></section>
-</div></div></section>
+</div>
+<div id="analyticsView" class="analytics-grid" hidden>
+<section class="panel trend"><h2>Report activity</h2><p class="muted">Daily submissions over the past 14 days · UTC</p><div id="trend"></div></section>
+<section class="panel"><h2>Fault categories</h2><p class="muted">Incidents by class</p><div id="faultBars"></div></section>
+<section class="panel"><h2>Workstations to review</h2><p class="muted">Ranked by recurrence count and incident volume</p><div id="busiest"></div></section>
+</div>
+</div></section>
 </main>
-<footer><strong>LabFix</strong><span id="footerNote">Workstation maintenance</span></footer>
+<footer><strong>LabFix</strong><span id="footerNote">Campus maintenance</span></footer>
 <script type="module" src="/app.js"></script>
 </body>
 </html>
