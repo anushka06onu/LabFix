@@ -65,7 +65,7 @@ export function matchReport(description, selected, mode = 'hybrid') {
     const phrase = (phrases[fault] || []).filter(term => contains(query,term)).length;
     const prototype = Math.max(...prototypeIndexes[fault].map(vector=>similarity(grams,vector)));
     const score = mode === 'baseline' ? (query.match(/^[\x00-\x7f]+$/) ? lexical : 0)
-      : lexical + 1.7 * phrase + .45 * similarity(grams,indexed) + 1.65 * prototype;
+      : lexical + 1.7 * phrase + (mode === 'lexical' ? 0 : .45 * similarity(grams,indexed) + 1.65 * prototype);
     return {fault,score};
   }).sort((a,b) => b.score-a.score);
   const [best,next] = ranked;
