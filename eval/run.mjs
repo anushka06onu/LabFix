@@ -1,10 +1,12 @@
 import {readFile,writeFile} from 'node:fs/promises';
 import {matchReport} from '../matching.mjs';
-const cases = JSON.parse(await readFile(new URL('cases.json',import.meta.url),'utf8'));
+const challenge=process.argv.includes('--challenge');
+const cases = JSON.parse(await readFile(new URL(challenge?'challenge.json':'cases.json',import.meta.url),'utf8'));
 const rows = cases.map(([language,description,selected,asset,fault])=>{
   const baseline=matchReport(description,selected,'baseline');
+  const lexical=matchReport(description,selected,'lexical');
   const hybrid=matchReport(description,selected);
-  return {language,description,selected,expected:{asset,fault},baseline,hybrid};
+  return {language,description,selected,expected:{asset,fault},baseline,lexical,hybrid};
 });
 const metric=(rows,mode)=>({
   cases:rows.length,
@@ -17,7 +19,7 @@ const metric=(rows,mode)=>({
 const metrics={};
 for(const language of ['All',...new Set(rows.map(row=>row.language))]){
   const group=language==='All'?rows:rows.filter(row=>row.language===language);
-  metrics[language]={baseline:metric(group,'baseline'),hybrid:metric(group,'hybrid')};
+  metrics[language]={baseline:metric(group,'baseline'),lexical:metric(group,'lexical'),hybrid:metric(group,'hybrid')};
 }
 console.table(Object.entries(metrics).flatMap(([language,modes])=>Object.entries(modes).map(([mode,m])=>({language,mode,...m}))));
-await writeFile(new URL('results.json',import.meta.url),JSON.stringify({metrics,rows},null,2)+'\n');
+await writeFile(new URL(challenge?'challenge-results.json':'results.json',import.meta.url),JSON.stringify({metrics,rows},null,2)+'\n');
