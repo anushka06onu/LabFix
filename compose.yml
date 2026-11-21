@@ -1,0 +1,12 @@
+services:
+  labfix:
+    build: .
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      LABFIX_OPERATOR_TOKEN: ${LABFIX_OPERATOR_TOKEN:?set a strong operator token}
+    volumes:
+      - labfix-data:/data
+    restart: unless-stopped
+volumes:
+  labfix-data:
