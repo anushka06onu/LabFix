@@ -8,6 +8,13 @@
         "joint": 11,
         "falseAutomaticLinks": 1
       },
+      "lexical": {
+        "cases": 30,
+        "workstation": 30,
+        "fault": 26,
+        "joint": 26,
+        "falseAutomaticLinks": 1
+      },
       "hybrid": {
         "cases": 30,
         "workstation": 30,
@@ -22,6 +29,13 @@
         "workstation": 7,
         "fault": 8,
         "joint": 5,
+        "falseAutomaticLinks": 0
+      },
+      "lexical": {
+        "cases": 10,
+        "workstation": 10,
+        "fault": 8,
+        "joint": 8,
         "falseAutomaticLinks": 0
       },
       "hybrid": {
@@ -40,6 +54,13 @@
         "joint": 1,
         "falseAutomaticLinks": 0
       },
+      "lexical": {
+        "cases": 10,
+        "workstation": 10,
+        "fault": 9,
+        "joint": 9,
+        "falseAutomaticLinks": 0
+      },
       "hybrid": {
         "cases": 10,
         "workstation": 10,
@@ -54,6 +75,13 @@
         "workstation": 6,
         "fault": 9,
         "joint": 5,
+        "falseAutomaticLinks": 1
+      },
+      "lexical": {
+        "cases": 10,
+        "workstation": 10,
+        "fault": 9,
+        "joint": 9,
         "falseAutomaticLinks": 1
       },
       "hybrid": {
@@ -75,6 +103,14 @@
         "fault": "power"
       },
       "baseline": {
+        "asset": "PC-04",
+        "fault": "power",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "power"
+        ]
+      },
+      "lexical": {
         "asset": "PC-04",
         "fault": "power",
         "explanation": "Matched workstation clue",
@@ -107,6 +143,14 @@
           "display"
         ]
       },
+      "lexical": {
+        "asset": "PC-03",
+        "fault": "display",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "display"
+        ]
+      },
       "hybrid": {
         "asset": "PC-03",
         "fault": "display",
@@ -125,6 +169,12 @@
         "fault": "network"
       },
       "baseline": {
+        "asset": "PC-07",
+        "fault": "other",
+        "explanation": "Matched workstation clue",
+        "signals": []
+      },
+      "lexical": {
         "asset": "PC-07",
         "fault": "other",
         "explanation": "Matched workstation clue",
@@ -153,6 +203,14 @@
           "input"
         ]
       },
+      "lexical": {
+        "asset": "PC-12",
+        "fault": "input",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "input"
+        ]
+      },
       "hybrid": {
         "asset": "PC-12",
         "fault": "input",
@@ -171,6 +229,14 @@
         "fault": "software"
       },
       "baseline": {
+        "asset": "PC-14",
+        "fault": "software",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "software"
+        ]
+      },
+      "lexical": {
         "asset": "PC-14",
         "fault": "software",
         "explanation": "Matched workstation clue",
@@ -203,6 +269,14 @@
           "thermal"
         ]
       },
+      "lexical": {
+        "asset": "PC-18",
+        "fault": "thermal",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "thermal"
+        ]
+      },
       "hybrid": {
         "asset": "PC-18",
         "fault": "thermal",
@@ -221,6 +295,14 @@
         "fault": "display"
       },
       "baseline": {
+        "asset": null,
+        "fault": "display",
+        "explanation": "Conflicting workstation clues",
+        "signals": [
+          "display"
+        ]
+      },
+      "lexical": {
         "asset": null,
         "fault": "display",
         "explanation": "Conflicting workstation clues",
@@ -253,6 +335,14 @@
           "display"
         ]
       },
+      "lexical": {
+        "asset": null,
+        "fault": "display",
+        "explanation": "Conflicting workstation clues",
+        "signals": [
+          "display"
+        ]
+      },
       "hybrid": {
         "asset": null,
         "fault": "display",
@@ -276,6 +366,12 @@
         "explanation": "Workstation needs confirmation",
         "signals": []
       },
+      "lexical": {
+        "asset": "PC-14",
+        "fault": "other",
+        "explanation": "Matched workstation clue",
+        "signals": []
+      },
       "hybrid": {
         "asset": "PC-14",
         "fault": "other",
@@ -292,6 +388,12 @@
         "fault": "network"
       },
       "baseline": {
+        "asset": null,
+        "fault": "other",
+        "explanation": "Workstation needs confirmation",
+        "signals": []
+      },
+      "lexical": {
         "asset": null,
         "fault": "other",
         "explanation": "Workstation needs confirmation",
@@ -318,6 +420,14 @@
         "explanation": "Matched workstation clue",
         "signals": []
       },
+      "lexical": {
+        "asset": "PC-17",
+        "fault": "power",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "power"
+        ]
+      },
       "hybrid": {
         "asset": "PC-17",
         "fault": "power",
@@ -336,6 +446,12 @@
         "fault": "display"
       },
       "baseline": {
+        "asset": "PC-05",
+        "fault": "other",
+        "explanation": "Matched workstation clue",
+        "signals": []
+      },
+      "lexical": {
         "asset": "PC-05",
         "fault": "other",
         "explanation": "Matched workstation clue",
@@ -362,6 +478,14 @@
         "explanation": "Matched workstation clue",
         "signals": []
       },
+      "lexical": {
+        "asset": "PC-12",
+        "fault": "network",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "network"
+        ]
+      },
       "hybrid": {
         "asset": "PC-12",
         "fault": "network",
@@ -384,6 +508,14 @@
         "fault": "other",
         "explanation": "Workstation needs confirmation",
         "signals": []
+      },
+      "lexical": {
+        "asset": "PC-08",
+        "fault": "input",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "input"
+        ]
       },
       "hybrid": {
         "asset": "PC-08",
@@ -408,6 +540,14 @@
         "explanation": "Matched workstation clue",
         "signals": []
       },
+      "lexical": {
+        "asset": "PC-09",
+        "fault": "software",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "software"
+        ]
+      },
       "hybrid": {
         "asset": "PC-09",
         "fault": "software",
@@ -430,6 +570,14 @@
         "fault": "other",
         "explanation": "Matched workstation clue",
         "signals": []
+      },
+      "lexical": {
+        "asset": "PC-11",
+        "fault": "thermal",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "thermal"
+        ]
       },
       "hybrid": {
         "asset": "PC-11",
@@ -454,6 +602,14 @@
         "explanation": "Workstation needs confirmation",
         "signals": []
       },
+      "lexical": {
+        "asset": null,
+        "fault": "display",
+        "explanation": "Workstation needs confirmation",
+        "signals": [
+          "display"
+        ]
+      },
       "hybrid": {
         "asset": null,
         "fault": "display",
@@ -477,6 +633,14 @@
         "explanation": "Workstation needs confirmation",
         "signals": []
       },
+      "lexical": {
+        "asset": null,
+        "fault": "power",
+        "explanation": "Workstation needs confirmation",
+        "signals": [
+          "power"
+        ]
+      },
       "hybrid": {
         "asset": null,
         "fault": "power",
@@ -495,6 +659,12 @@
         "fault": "other"
       },
       "baseline": {
+        "asset": "PC-02",
+        "fault": "other",
+        "explanation": "Matched workstation clue",
+        "signals": []
+      },
+      "lexical": {
         "asset": "PC-02",
         "fault": "other",
         "explanation": "Matched workstation clue",
@@ -521,6 +691,14 @@
         "explanation": "Conflicting workstation clues",
         "signals": []
       },
+      "lexical": {
+        "asset": null,
+        "fault": "display",
+        "explanation": "Conflicting workstation clues",
+        "signals": [
+          "display"
+        ]
+      },
       "hybrid": {
         "asset": null,
         "fault": "display",
@@ -546,6 +724,14 @@
           "power"
         ]
       },
+      "lexical": {
+        "asset": "PC-17",
+        "fault": "power",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "power"
+        ]
+      },
       "hybrid": {
         "asset": "PC-17",
         "fault": "power",
@@ -564,6 +750,14 @@
         "fault": "display"
       },
       "baseline": {
+        "asset": "PC-06",
+        "fault": "display",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "display"
+        ]
+      },
+      "lexical": {
         "asset": "PC-06",
         "fault": "display",
         "explanation": "Matched workstation clue",
@@ -596,6 +790,14 @@
           "network"
         ]
       },
+      "lexical": {
+        "asset": "PC-09",
+        "fault": "network",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "network"
+        ]
+      },
       "hybrid": {
         "asset": "PC-09",
         "fault": "network",
@@ -621,6 +823,14 @@
           "input"
         ]
       },
+      "lexical": {
+        "asset": "PC-10",
+        "fault": "input",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "input"
+        ]
+      },
       "hybrid": {
         "asset": "PC-10",
         "fault": "input",
@@ -639,6 +849,14 @@
         "fault": "software"
       },
       "baseline": {
+        "asset": "PC-05",
+        "fault": "power",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "power"
+        ]
+      },
+      "lexical": {
         "asset": "PC-05",
         "fault": "power",
         "explanation": "Matched workstation clue",
@@ -672,6 +890,14 @@
           "thermal"
         ]
       },
+      "lexical": {
+        "asset": "PC-16",
+        "fault": "thermal",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "thermal"
+        ]
+      },
       "hybrid": {
         "asset": "PC-16",
         "fault": "thermal",
@@ -693,6 +919,14 @@
         "asset": null,
         "fault": "display",
         "explanation": "Workstation needs confirmation",
+        "signals": [
+          "display"
+        ]
+      },
+      "lexical": {
+        "asset": "PC-18",
+        "fault": "display",
+        "explanation": "Matched workstation clue",
         "signals": [
           "display"
         ]
@@ -722,6 +956,14 @@
           "power"
         ]
       },
+      "lexical": {
+        "asset": "PC-14",
+        "fault": "power",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "power"
+        ]
+      },
       "hybrid": {
         "asset": "PC-14",
         "fault": "power",
@@ -745,6 +987,12 @@
         "explanation": "Matched workstation clue",
         "signals": []
       },
+      "lexical": {
+        "asset": "PC-02",
+        "fault": "other",
+        "explanation": "Matched workstation clue",
+        "signals": []
+      },
       "hybrid": {
         "asset": "PC-02",
         "fault": "other",
@@ -761,6 +1009,14 @@
         "fault": "network"
       },
       "baseline": {
+        "asset": null,
+        "fault": "network",
+        "explanation": "Workstation needs confirmation",
+        "signals": [
+          "network"
+        ]
+      },
+      "lexical": {
         "asset": null,
         "fault": "network",
         "explanation": "Workstation needs confirmation",
