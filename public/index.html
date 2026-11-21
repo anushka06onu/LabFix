@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Report and track shared computer lab maintenance.">
+<title>LabFix · Workstation maintenance</title><link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header><div class="top">
+<a href="/" class="brand"><span class="mark" aria-hidden="true">LF</span>LabFix</a>
+<nav aria-label="Workspace"><button id="reportTab" aria-pressed="true">Report a fault</button><button id="opsTab" aria-pressed="false">Operator desk</button></nav>
+</div></header>
+<main>
+<section class="hero"><div><p id="context" class="eyebrow">Computer lab maintenance</p><h1 id="title">Get a workstation fixed.</h1><p id="intro">Report a problem in English, বাংলা, or Banglish. A lab operator can use your report to trace the issue and its repair history.</p></div><label for="lab">Computer lab<select id="lab" disabled></select></label></section>
+<p id="globalMessage" aria-live="polite"></p>
+<section id="reportView" class="layout">
+<article class="panel">
+<h2>Pick a workstation</h2><p class="muted">Use the map or mention the PC number in your report.</p>
+<div class="board">Teaching desk</div><div id="assetMap" class="asset-map" aria-label="Workstation map"></div>
+<button id="clearAsset" class="quiet" type="button">Clear workstation selection</button>
+</article>
+<form id="reportForm" class="panel">
+<h2>Describe the problem</h2><p id="assetChoice" class="muted" aria-live="polite">Workstation unknown</p>
+<label for="description">What happened? Leave out names and contact details.</label>
+<textarea id="description" minlength="8" maxlength="600" rows="5" required placeholder="PC 17 বারবার বন্ধ হয়ে যায়"></textarea>
+<div class="actions"><button class="primary" type="submit">Send report</button></div>
+<p id="receipt" class="feedback" role="status"></p>
+</form>
+</section>
+<section id="operatorView" hidden>
+<form id="login" class="panel"><h2>Operator access</h2><label for="token">Operator token</label><input id="token" type="password" required autocomplete="off"><button class="primary">Unlock desk</button><p id="loginMessage" role="status"></p></form>
+<div id="desk" hidden>
+<div id="metrics" class="metrics"></div>
+<div class="operator-grid">
+<section class="panel queue"><div class="heading"><div><h2>Incident queue</h2><p class="muted">Most recently updated incidents</p></div><button class="quiet" id="refresh">Refresh</button></div>
+<label for="filter">Status<select id="filter"><option value="all">All incidents</option><option value="open">Open</option><option value="working">In progress</option><option value="review">Needs review</option><option value="resolved">Resolved</option></select></label>
+<div id="queue"></div></section>
+<section class="panel" id="detail" aria-label="Incident detail"><h2>Incident detail</h2><p class="muted">Select an incident to view reports and repair history.</p></section>
+</div></div></section>
+</main>
+<footer><strong>LabFix</strong><span id="footerNote">Workstation maintenance</span></footer>
+<script type="module" src="/app.js"></script>
+</body>
+</html>
