@@ -9,7 +9,7 @@ const demo = process.env.LABFIX_DEMO === '1';
 const token = process.env.LABFIX_OPERATOR_TOKEN || '';
 if (!demo && token.length < 24) throw new Error('Set LABFIX_OPERATOR_TOKEN to at least 24 characters, or enable the local demo.');
 const base = new URL('./public/',import.meta.url);
-const files = {'/':['index.html','text/html'],'/app.js':['app.js','text/javascript'],'/app.css':['app.css','text/css']};
+const files = {'/':['index.html','text/html'],'/app.js':['app.js','text/javascript'],'/app.css':['app.css','text/css'],'/matching.mjs':['../matching.mjs','text/javascript']};
 const dbPath = process.env.LABFIX_DB || (demo ? './data/demo.sqlite' : './data/labfix.sqlite');
 if (dbPath !== ':memory:') mkdirSync(dirname(dbPath),{recursive:true});
 const store = openStore(dbPath);
@@ -73,6 +73,17 @@ const server = createServer({requestTimeout:15000}, async (req,res) => {
     }
     if (method==='GET' && pathname==='/healthz') return send(res,200,{status:'ok'});
     if (method==='GET' && pathname==='/api/config') return send(res,200,{labs,assets:assets(),faults,demo});
+    if (method==='GET' && pathname==='/api/map') {
+      const lab = url.searchParams.get('lab');
+      return labValid(lab) ? send(res,200,{status:store.mapStatus(lab)}) : send(res,400,{error:'Unknown lab.'});
+    }
+    if (method==='POST' && pathname==='/api/track') {
+      if (!allowed(req,'tracking',40)) return send(res,429,{error:'Please wait before checking another receipt.'});
+      const {data} = await readBody(req);
+      const code = typeof data?.code==='string' && /^[a-f0-9]{24}$/.test(data.code) ? data.code : null;
+      const receipt = code && store.track(code);
+      return receipt ? send(res,200,receipt) : send(res,404,{error:'Tracking code not found.'});
+    }
     if (pathname==='/api/reports' && method==='POST') {
       if (!allowed(req,'report',30)) return send(res,429,{error:'Please wait before sending another report.'});
       const {data,status} = await readBody(req);
@@ -83,14 +94,14 @@ const server = createServer({requestTimeout:15000}, async (req,res) => {
         (key!=null && (typeof key!=='string' || !/^[a-zA-Z0-9-]{16,80}$/.test(key))))
         return send(res,400,{error:'Choose a lab and enter a report between 8 and 600 characters.'});
       const result = store.report({lab,asset,description,key});
-      return send(res,201,{report:result.report,action:result.action});
+      return send(res,201,{report:result.report,tracking:result.tracking,action:result.action});
     }
     if (pathname.startsWith('/api/operator/')) {
       if (!authorized(req)) return send(res,allowed(req,'auth',25) ? 401 : 429,{error:'Operator access required.'});
       if (method==='GET' && pathname==='/api/operator/incidents') {
         const lab = url.searchParams.get('lab');
         if (!labValid(lab)) return send(res,400,{error:'Unknown lab.'});
-        return send(res,200,{incidents:store.list(lab),metrics:store.metrics(lab)});
+        return send(res,200,{incidents:store.list(lab),metrics:store.metrics(lab),analytics:store.analytics(lab)});
       }
       const route = pathname.match(/^\/api\/operator\/incidents\/(\d{1,12})(\/merge)?$/);
       if (route) {
@@ -107,12 +118,14 @@ const server = createServer({requestTimeout:15000}, async (req,res) => {
             if (!Number.isSafeInteger(data.target) || data.target<1) return send(res,400,{error:'Enter a valid destination incident ID.'});
             result = store.merge(id,data.target);
           } else {
-            const {status:next,asset,fault} = data;
+            const {status:next,asset,fault,priority,assignee} = data;
             const note = typeof data.note==='string' ? data.note.trim() : '';
             if (!statuses.includes(next) || (asset!=null && !assetValid(asset)) ||
-              (fault!=null && !Object.hasOwn(faults,fault)) || note.length>500)
+              (fault!=null && !Object.hasOwn(faults,fault)) || note.length>500 ||
+              (priority!=null && !['normal','high','urgent'].includes(priority)) ||
+              (assignee!=null && (typeof assignee!=='string'||assignee.length>60)))
               return send(res,400,{error:'Check the workstation, status, and repair note.'});
-            result = store.update(id,{status:next,asset,fault,note});
+            result = store.update(id,{status:next,asset,fault,note,priority,assignee:assignee?.trim()});
           }
           return send(res,result ? (result.error ? 409 : 200) : 404,result || {error:'Incident not found.'});
         }
@@ -126,5 +139,7 @@ const server = createServer({requestTimeout:15000}, async (req,res) => {
   }
 });
 const host = demo ? '127.0.0.1' : (process.env.HOST || '127.0.0.1');
-server.listen(Number(process.env.PORT ?? 8080),host,()=>console.log('LabFix ready http://'+host+':'+server.address().port));
+const portFlag = process.argv.indexOf('--port');
+const port = portFlag >= 0 ? process.argv[portFlag+1] : process.env.PORT ?? 8080;
+server.listen(Number(port),host,()=>console.log('LabFix ready http://'+host+':'+server.address().port));
 for (const signal of ['SIGINT','SIGTERM']) process.once(signal,()=>server.close(()=>{store.close();process.exit(0);}));
