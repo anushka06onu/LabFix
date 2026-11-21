@@ -1,0 +1,848 @@
+{
+  "metrics": {
+    "All": {
+      "baseline": {
+        "cases": 24,
+        "workstation": 19,
+        "fault": 16,
+        "joint": 13,
+        "falseAutomaticLinks": 0
+      },
+      "lexical": {
+        "cases": 24,
+        "workstation": 24,
+        "fault": 22,
+        "joint": 22,
+        "falseAutomaticLinks": 0
+      },
+      "hybrid": {
+        "cases": 24,
+        "workstation": 24,
+        "fault": 22,
+        "joint": 22,
+        "falseAutomaticLinks": 0
+      }
+    },
+    "English": {
+      "baseline": {
+        "cases": 8,
+        "workstation": 7,
+        "fault": 7,
+        "joint": 6,
+        "falseAutomaticLinks": 0
+      },
+      "lexical": {
+        "cases": 8,
+        "workstation": 8,
+        "fault": 7,
+        "joint": 7,
+        "falseAutomaticLinks": 0
+      },
+      "hybrid": {
+        "cases": 8,
+        "workstation": 8,
+        "fault": 7,
+        "joint": 7,
+        "falseAutomaticLinks": 0
+      }
+    },
+    "Bangla": {
+      "baseline": {
+        "cases": 8,
+        "workstation": 6,
+        "fault": 1,
+        "joint": 1,
+        "falseAutomaticLinks": 0
+      },
+      "lexical": {
+        "cases": 8,
+        "workstation": 8,
+        "fault": 7,
+        "joint": 7,
+        "falseAutomaticLinks": 0
+      },
+      "hybrid": {
+        "cases": 8,
+        "workstation": 8,
+        "fault": 7,
+        "joint": 7,
+        "falseAutomaticLinks": 0
+      }
+    },
+    "Banglish": {
+      "baseline": {
+        "cases": 8,
+        "workstation": 6,
+        "fault": 8,
+        "joint": 6,
+        "falseAutomaticLinks": 0
+      },
+      "lexical": {
+        "cases": 8,
+        "workstation": 8,
+        "fault": 8,
+        "joint": 8,
+        "falseAutomaticLinks": 0
+      },
+      "hybrid": {
+        "cases": 8,
+        "workstation": 8,
+        "fault": 8,
+        "joint": 8,
+        "falseAutomaticLinks": 0
+      }
+    }
+  },
+  "rows": [
+    {
+      "language": "English",
+      "description": "The PC 3 screen has horizontal lines and keeps flickering",
+      "selected": null,
+      "expected": {
+        "asset": "PC-03",
+        "fault": "display"
+      },
+      "baseline": {
+        "asset": "PC-03",
+        "fault": "display",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "display"
+        ]
+      },
+      "lexical": {
+        "asset": "PC-03",
+        "fault": "display",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "display"
+        ]
+      },
+      "hybrid": {
+        "asset": "PC-03",
+        "fault": "display",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "display"
+        ]
+      }
+    },
+    {
+      "language": "English",
+      "description": "Workstation loses ethernet the moment the lab starts",
+      "selected": "PC-10",
+      "expected": {
+        "asset": "PC-10",
+        "fault": "network"
+      },
+      "baseline": {
+        "asset": "PC-10",
+        "fault": "network",
+        "explanation": "Workstation selected on the map",
+        "signals": [
+          "network"
+        ]
+      },
+      "lexical": {
+        "asset": "PC-10",
+        "fault": "network",
+        "explanation": "Workstation selected on the map",
+        "signals": [
+          "network"
+        ]
+      },
+      "hybrid": {
+        "asset": "PC-10",
+        "fault": "network",
+        "explanation": "Workstation selected on the map",
+        "signals": [
+          "network"
+        ]
+      }
+    },
+    {
+      "language": "English",
+      "description": "Row C seat 2 shuts itself off completely",
+      "selected": null,
+      "expected": {
+        "asset": "PC-14",
+        "fault": "power"
+      },
+      "baseline": {
+        "asset": null,
+        "fault": "power",
+        "explanation": "Workstation needs confirmation",
+        "signals": [
+          "power"
+        ]
+      },
+      "lexical": {
+        "asset": "PC-14",
+        "fault": "power",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "power"
+        ]
+      },
+      "hybrid": {
+        "asset": "PC-14",
+        "fault": "power",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "power"
+        ]
+      }
+    },
+    {
+      "language": "English",
+      "description": "The pointer jumps each time I move the mouse",
+      "selected": "PC-02",
+      "expected": {
+        "asset": "PC-02",
+        "fault": "input"
+      },
+      "baseline": {
+        "asset": "PC-02",
+        "fault": "input",
+        "explanation": "Workstation selected on the map",
+        "signals": [
+          "input"
+        ]
+      },
+      "lexical": {
+        "asset": "PC-02",
+        "fault": "input",
+        "explanation": "Workstation selected on the map",
+        "signals": [
+          "input"
+        ]
+      },
+      "hybrid": {
+        "asset": "PC-02",
+        "fault": "input",
+        "explanation": "Workstation selected on the map",
+        "signals": [
+          "input"
+        ]
+      }
+    },
+    {
+      "language": "English",
+      "description": "My code builds fine but the IDE crashes when I launch it",
+      "selected": "PC-06",
+      "expected": {
+        "asset": "PC-06",
+        "fault": "software"
+      },
+      "baseline": {
+        "asset": "PC-06",
+        "fault": "software",
+        "explanation": "Workstation selected on the map",
+        "signals": [
+          "software"
+        ]
+      },
+      "lexical": {
+        "asset": "PC-06",
+        "fault": "software",
+        "explanation": "Workstation selected on the map",
+        "signals": [
+          "software"
+        ]
+      },
+      "hybrid": {
+        "asset": "PC-06",
+        "fault": "software",
+        "explanation": "Workstation selected on the map",
+        "signals": [
+          "software"
+        ]
+      }
+    },
+    {
+      "language": "English",
+      "description": "PC 11 smells warm and the case is really hot",
+      "selected": null,
+      "expected": {
+        "asset": "PC-11",
+        "fault": "thermal"
+      },
+      "baseline": {
+        "asset": "PC-11",
+        "fault": "thermal",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "thermal"
+        ]
+      },
+      "lexical": {
+        "asset": "PC-11",
+        "fault": "thermal",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "thermal"
+        ]
+      },
+      "hybrid": {
+        "asset": "PC-11",
+        "fault": "thermal",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "thermal"
+        ]
+      }
+    },
+    {
+      "language": "English",
+      "description": "Something is wrong with PC 1 and PC 13",
+      "selected": null,
+      "expected": {
+        "asset": null,
+        "fault": "other"
+      },
+      "baseline": {
+        "asset": null,
+        "fault": "other",
+        "explanation": "Conflicting workstation clues",
+        "signals": []
+      },
+      "lexical": {
+        "asset": null,
+        "fault": "other",
+        "explanation": "Conflicting workstation clues",
+        "signals": []
+      },
+      "hybrid": {
+        "asset": null,
+        "fault": "other",
+        "explanation": "Conflicting workstation clues",
+        "signals": []
+      }
+    },
+    {
+      "language": "English",
+      "description": "Near the whiteboard, websites show a DNS failure",
+      "selected": null,
+      "expected": {
+        "asset": null,
+        "fault": "network"
+      },
+      "baseline": {
+        "asset": null,
+        "fault": "other",
+        "explanation": "Workstation needs confirmation",
+        "signals": []
+      },
+      "lexical": {
+        "asset": null,
+        "fault": "other",
+        "explanation": "Workstation needs confirmation",
+        "signals": []
+      },
+      "hybrid": {
+        "asset": null,
+        "fault": "other",
+        "explanation": "Workstation needs confirmation",
+        "signals": []
+      }
+    },
+    {
+      "language": "Bangla",
+      "description": "পিসি ০৮ চালু হয় না",
+      "selected": null,
+      "expected": {
+        "asset": "PC-08",
+        "fault": "power"
+      },
+      "baseline": {
+        "asset": "PC-08",
+        "fault": "other",
+        "explanation": "Matched workstation clue",
+        "signals": []
+      },
+      "lexical": {
+        "asset": "PC-08",
+        "fault": "power",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "power"
+        ]
+      },
+      "hybrid": {
+        "asset": "PC-08",
+        "fault": "power",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "power"
+        ]
+      }
+    },
+    {
+      "language": "Bangla",
+      "description": "সারি A সিট ৪ এর স্ক্রিনে দাগ পড়ে",
+      "selected": null,
+      "expected": {
+        "asset": "PC-04",
+        "fault": "display"
+      },
+      "baseline": {
+        "asset": null,
+        "fault": "other",
+        "explanation": "Workstation needs confirmation",
+        "signals": []
+      },
+      "lexical": {
+        "asset": "PC-04",
+        "fault": "other",
+        "explanation": "Matched workstation clue",
+        "signals": []
+      },
+      "hybrid": {
+        "asset": "PC-04",
+        "fault": "other",
+        "explanation": "Matched workstation clue",
+        "signals": []
+      }
+    },
+    {
+      "language": "Bangla",
+      "description": "পিসি ১৩ ওয়াইফাই পাচ্ছে না",
+      "selected": null,
+      "expected": {
+        "asset": "PC-13",
+        "fault": "network"
+      },
+      "baseline": {
+        "asset": "PC-13",
+        "fault": "other",
+        "explanation": "Matched workstation clue",
+        "signals": []
+      },
+      "lexical": {
+        "asset": "PC-13",
+        "fault": "network",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "network"
+        ]
+      },
+      "hybrid": {
+        "asset": "PC-13",
+        "fault": "network",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "network"
+        ]
+      }
+    },
+    {
+      "language": "Bangla",
+      "description": "পিসি ০১ এ কীবোর্ড কাজ করে না",
+      "selected": null,
+      "expected": {
+        "asset": "PC-01",
+        "fault": "input"
+      },
+      "baseline": {
+        "asset": "PC-01",
+        "fault": "other",
+        "explanation": "Matched workstation clue",
+        "signals": []
+      },
+      "lexical": {
+        "asset": "PC-01",
+        "fault": "input",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "input"
+        ]
+      },
+      "hybrid": {
+        "asset": "PC-01",
+        "fault": "input",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "input"
+        ]
+      }
+    },
+    {
+      "language": "Bangla",
+      "description": "পিসি ১৫ জাভা কোডে কম্পাইল এরর দিচ্ছে",
+      "selected": null,
+      "expected": {
+        "asset": "PC-15",
+        "fault": "software"
+      },
+      "baseline": {
+        "asset": "PC-15",
+        "fault": "other",
+        "explanation": "Matched workstation clue",
+        "signals": []
+      },
+      "lexical": {
+        "asset": "PC-15",
+        "fault": "software",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "software"
+        ]
+      },
+      "hybrid": {
+        "asset": "PC-15",
+        "fault": "software",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "software"
+        ]
+      }
+    },
+    {
+      "language": "Bangla",
+      "description": "শেষ সারি শেষ সিট কম্পিউটার খুব গরম",
+      "selected": null,
+      "expected": {
+        "asset": "PC-18",
+        "fault": "thermal"
+      },
+      "baseline": {
+        "asset": null,
+        "fault": "other",
+        "explanation": "Workstation needs confirmation",
+        "signals": []
+      },
+      "lexical": {
+        "asset": "PC-18",
+        "fault": "thermal",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "thermal"
+        ]
+      },
+      "hybrid": {
+        "asset": "PC-18",
+        "fault": "thermal",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "thermal"
+        ]
+      }
+    },
+    {
+      "language": "Bangla",
+      "description": "পিসি ১১ নাকি পিসি ১২ ঠিক বুঝিনি, মাউস কাজ করে না",
+      "selected": null,
+      "expected": {
+        "asset": null,
+        "fault": "input"
+      },
+      "baseline": {
+        "asset": null,
+        "fault": "other",
+        "explanation": "Conflicting workstation clues",
+        "signals": []
+      },
+      "lexical": {
+        "asset": null,
+        "fault": "input",
+        "explanation": "Conflicting workstation clues",
+        "signals": [
+          "input"
+        ]
+      },
+      "hybrid": {
+        "asset": null,
+        "fault": "input",
+        "explanation": "Conflicting workstation clues",
+        "signals": [
+          "input"
+        ]
+      }
+    },
+    {
+      "language": "Bangla",
+      "description": "বোর্ডের পাশে বসেছিলাম, কী যে হয়েছে বুঝতে পারছি না",
+      "selected": null,
+      "expected": {
+        "asset": null,
+        "fault": "other"
+      },
+      "baseline": {
+        "asset": null,
+        "fault": "other",
+        "explanation": "Workstation needs confirmation",
+        "signals": []
+      },
+      "lexical": {
+        "asset": null,
+        "fault": "other",
+        "explanation": "Workstation needs confirmation",
+        "signals": []
+      },
+      "hybrid": {
+        "asset": null,
+        "fault": "other",
+        "explanation": "Workstation needs confirmation",
+        "signals": []
+      }
+    },
+    {
+      "language": "Banglish",
+      "description": "PC 12 hothat bondho hoye abar chalu hoy",
+      "selected": null,
+      "expected": {
+        "asset": "PC-12",
+        "fault": "power"
+      },
+      "baseline": {
+        "asset": "PC-12",
+        "fault": "power",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "power"
+        ]
+      },
+      "lexical": {
+        "asset": "PC-12",
+        "fault": "power",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "power"
+        ]
+      },
+      "hybrid": {
+        "asset": "PC-12",
+        "fault": "power",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "power"
+        ]
+      }
+    },
+    {
+      "language": "Banglish",
+      "description": "Row A seat 2 monitor e no signal dekhay",
+      "selected": null,
+      "expected": {
+        "asset": "PC-02",
+        "fault": "display"
+      },
+      "baseline": {
+        "asset": null,
+        "fault": "display",
+        "explanation": "Workstation needs confirmation",
+        "signals": [
+          "display"
+        ]
+      },
+      "lexical": {
+        "asset": "PC-02",
+        "fault": "display",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "display"
+        ]
+      },
+      "hybrid": {
+        "asset": "PC-02",
+        "fault": "display",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "display"
+        ]
+      }
+    },
+    {
+      "language": "Banglish",
+      "description": "PC 05 te net dhore na ajke",
+      "selected": null,
+      "expected": {
+        "asset": "PC-05",
+        "fault": "network"
+      },
+      "baseline": {
+        "asset": "PC-05",
+        "fault": "network",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "network"
+        ]
+      },
+      "lexical": {
+        "asset": "PC-05",
+        "fault": "network",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "network"
+        ]
+      },
+      "hybrid": {
+        "asset": "PC-05",
+        "fault": "network",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "network"
+        ]
+      }
+    },
+    {
+      "language": "Banglish",
+      "description": "PC 09 er mouse click ney na",
+      "selected": null,
+      "expected": {
+        "asset": "PC-09",
+        "fault": "input"
+      },
+      "baseline": {
+        "asset": "PC-09",
+        "fault": "input",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "input"
+        ]
+      },
+      "lexical": {
+        "asset": "PC-09",
+        "fault": "input",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "input"
+        ]
+      },
+      "hybrid": {
+        "asset": "PC-09",
+        "fault": "input",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "input"
+        ]
+      }
+    },
+    {
+      "language": "Banglish",
+      "description": "PC 04 te Java IDE crash kore execute dile",
+      "selected": null,
+      "expected": {
+        "asset": "PC-04",
+        "fault": "software"
+      },
+      "baseline": {
+        "asset": "PC-04",
+        "fault": "software",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "software"
+        ]
+      },
+      "lexical": {
+        "asset": "PC-04",
+        "fault": "software",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "software"
+        ]
+      },
+      "hybrid": {
+        "asset": "PC-04",
+        "fault": "software",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "software"
+        ]
+      }
+    },
+    {
+      "language": "Banglish",
+      "description": "last row seat 3 cpu ta onek gorom",
+      "selected": null,
+      "expected": {
+        "asset": "PC-15",
+        "fault": "thermal"
+      },
+      "baseline": {
+        "asset": null,
+        "fault": "thermal",
+        "explanation": "Workstation needs confirmation",
+        "signals": [
+          "thermal"
+        ]
+      },
+      "lexical": {
+        "asset": "PC-15",
+        "fault": "thermal",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "thermal"
+        ]
+      },
+      "hybrid": {
+        "asset": "PC-15",
+        "fault": "thermal",
+        "explanation": "Matched workstation clue",
+        "signals": [
+          "thermal"
+        ]
+      }
+    },
+    {
+      "language": "Banglish",
+      "description": "PC 6 er problem ta bujhte parsi na",
+      "selected": null,
+      "expected": {
+        "asset": "PC-06",
+        "fault": "other"
+      },
+      "baseline": {
+        "asset": "PC-06",
+        "fault": "other",
+        "explanation": "Matched workstation clue",
+        "signals": []
+      },
+      "lexical": {
+        "asset": "PC-06",
+        "fault": "other",
+        "explanation": "Matched workstation clue",
+        "signals": []
+      },
+      "hybrid": {
+        "asset": "PC-06",
+        "fault": "other",
+        "explanation": "Matched workstation clue",
+        "signals": []
+      }
+    },
+    {
+      "language": "Banglish",
+      "description": "PC 10 na PC 11 mone nai but noisy fan",
+      "selected": null,
+      "expected": {
+        "asset": null,
+        "fault": "thermal"
+      },
+      "baseline": {
+        "asset": null,
+        "fault": "thermal",
+        "explanation": "Conflicting workstation clues",
+        "signals": [
+          "thermal"
+        ]
+      },
+      "lexical": {
+        "asset": null,
+        "fault": "thermal",
+        "explanation": "Conflicting workstation clues",
+        "signals": [
+          "thermal"
+        ]
+      },
+      "hybrid": {
+        "asset": null,
+        "fault": "thermal",
+        "explanation": "Conflicting workstation clues",
+        "signals": [
+          "thermal"
+        ]
+      }
+    }
+  ]
+}
