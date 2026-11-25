@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
+import {DatabaseSync} from 'node:sqlite';
 import {matchReport} from '../matching.mjs';
 import {openStore} from '../store.mjs';
 
@@ -69,10 +70,58 @@ test('incidents persist after a new database connection',t=>{
   try {
     const first=openStore(path);
     const {id}=issue(first,'PC 2 monitor blank');
+    first.setAvailability('innovation','PC-02',true,'Awaiting a monitor replacement',1);
+    first.setAvailability('innovation','PC-02',false,'Replacement verified',2);
     first.close();
     const second=openStore(path);
     assert.equal(second.detail(id).asset,'PC-02');
+    assert.deepEqual(second.workstationHistory('innovation','PC-02').map(row=>row.offline),[0,1]);
+    assert.deepEqual(second.workstationHistory('systems','PC-02'),[]);
     second.close();
+  } finally {rmSync(folder,{recursive:true,force:true});}
+});
+test('first-response deadline and revision follow the current repair cycle',t=>{
+  const store=fixture(t);
+  const start=Date.UTC(2026,10,24,8);
+  const hour=3600_000;
+  const {id}=issue(store,'PC 3 monitor shows no signal',{},start);
+  const opened=store.detail(id);
+  const urgent=store.update(id,{status:'open',priority:'urgent',revision:opened.revision},start+hour);
+  assert.equal(urgent.response_due,start+2*hour);
+  assert.equal(store.metrics('innovation',start+2*hour-1).overdue,0);
+  assert.equal(store.metrics('innovation',start+2*hour).overdue,1);
+  assert.match(store.update(id,{status:'working',revision:opened.revision},start+2*hour).error,/changed/);
+  const working=store.update(id,{status:'working',revision:urgent.revision},start+3*hour);
+  assert.equal(working.first_response,start+3*hour);
+  assert.equal(store.metrics('innovation',start+4*hour).overdue,0);
+  store.update(id,{status:'resolved',note:'New monitor fitted'},start+5*hour);
+  assert.equal(store.detail(id).first_response,working.first_response);
+  assert.equal(issue(store,'PC 3 monitor shows no signal',{},start+6*hour).action,'reopened');
+  assert.equal(store.detail(id).first_response,null);
+  assert.equal(store.detail(id).response_due,start+8*hour);
+  assert.equal(store.metrics('innovation',start+8*hour).overdue,1);
+});
+test('earlier databases recover the current response cycle from the event log',t=>{
+  const folder=mkdtempSync(join(tmpdir(),'labfix-migrate-'));
+  const path=join(folder,'legacy.sqlite');
+  try {
+    const old=new DatabaseSync(path);
+    old.exec(`
+      CREATE TABLE incidents(id INTEGER PRIMARY KEY AUTOINCREMENT, lab TEXT, asset TEXT, fault TEXT,
+        status TEXT, created INTEGER, updated INTEGER, resolved INTEGER, repeats INTEGER);
+      CREATE TABLE events(id INTEGER PRIMARY KEY, incident INTEGER, type TEXT, note TEXT, created INTEGER);
+      INSERT INTO incidents VALUES(1,'innovation','PC-03','display','open',100,300,NULL,1);
+      INSERT INTO events VALUES(1,1,'created','Report received',100),(2,1,'working','Investigated',150),
+        (3,1,'resolved','New cable',200),(4,1,'reopened','Returned after repair',300);
+      INSERT INTO incidents VALUES(2,'innovation','PC-02','power','working',400,500,NULL,0);
+      INSERT INTO events VALUES(5,2,'created','Report received',400),(6,2,'working','Investigated',500);
+    `);
+    old.close();
+    const store=openStore(path);
+    assert.equal(store.detail(1).cycle_started,300);
+    assert.equal(store.detail(1).first_response,null);
+    assert.equal(store.detail(2).first_response,500);
+    store.close();
   } finally {rmSync(folder,{recursive:true,force:true});}
 });
 test('production HTTP flow, input validation, and operator access',{timeout:15000},async t=>{
@@ -89,6 +138,26 @@ test('production HTTP flow, input validation, and operator access',{timeout:1500
   assert.equal((await fetch(url+'/healthz')).status,200);
   assert.match(await (await fetch(url)).text(),/New fault report/);
   assert.equal((await fetch(url+operator+'?lab=innovation')).status,401);
+  const evaluation=await (await fetch(url+'/api/evaluation')).json();
+  assert.equal(evaluation.original.All.hybrid.joint,26);
+  assert.equal(evaluation.challenge.All.hybrid.joint,22);
+  const knowledge='/api/operator/knowledge?q=monitor+flickers&fault=display';
+  assert.equal((await fetch(url+knowledge)).status,401);
+  const library=await (await fetch(url+knowledge,{headers:auth})).json();
+  assert.equal(library.entries[0].id,'KB-D02');
+  const workstation='/api/operator/workstations/PC-03?lab=innovation';
+  assert.equal((await fetch(url+workstation)).status,401);
+  assert.equal((await post(workstation,{offline:true,note:'Private service note'}, {},'PATCH')).status,401);
+  assert.equal((await post(workstation,{offline:true,note:'   '},auth,'PATCH')).status,400);
+  assert.equal((await post(workstation,{offline:true,note:'Private service note'},auth,'PATCH')).status,200);
+  assert.equal((await post(workstation,{offline:true,note:'Duplicate change'},auth,'PATCH')).status,409);
+  const map=async lab=>(await (await fetch(url+'/api/map?lab='+lab)).json()).status;
+  assert.deepEqual(await map('innovation'),[{asset:'PC-03',active:0,recurrent:0,offline:true}]);
+  assert.deepEqual(await map('systems'),[]);
+  const history=await (await fetch(url+workstation,{headers:auth})).json();
+  assert.equal(history.history[0].note,'Private service note');
+  assert.equal((await post(workstation,{offline:false,note:'Restored service'},auth,'PATCH')).status,200);
+  assert.deepEqual(await map('innovation'),[]);
   assert.equal((await post('/api/reports',{lab:'other',description:'PC 3 monitor blank'})).status,400);
   const response=await post('/api/reports',{lab:'innovation',description:'PC 3 monitor blank'});
   assert.equal(response.status,201);
@@ -103,21 +172,37 @@ test('production HTTP flow, input validation, and operator access',{timeout:1500
   assert.equal(Object.hasOwn(receipt,'description'),false);
   const result=await (await fetch(url+operator+'?lab=innovation',{headers:auth})).json();
   const id=result.incidents[0].id;
+  const triage=operator+'/'+id+'/triage';
+  assert.equal((await post(triage,{focus:'triage'})).status,401);
+  assert.equal((await post(triage,{focus:'invalid'},auth)).status,400);
+  const draftResponse=await post(triage,{focus:'triage'},auth);
+  assert.equal(draftResponse.status,201);
+  const draft=await draftResponse.json();
+  assert.equal(draft.mode,'evidence');
+  assert.equal(draft.citations[0],'KB-D01');
+  assert.ok(draft.checks.every(check=>check.source==='KB-D01'));
+  assert.equal((await post(triage+'/'+draft.id,{note:'Compare with spare display'},auth,'PATCH')).status,200);
+  assert.equal((await post(triage+'/'+draft.id,{note:'Duplicate review'},auth,'PATCH')).status,409);
+  const latest=await (await post(triage,{focus:'triage'},auth)).json();
+  assert.equal((await fetch(url+triage,{headers:auth})).status,200);
   assert.equal(result.metrics.active,1);
   assert.deepEqual(result.analytics.daily.map(day=>day.total),[1]);
   assert.equal((await (await fetch(url+'/api/map?lab=innovation')).json()).status[0].asset,'PC-03');
   assert.equal((await post(operator+'/'+id,{status:'working',priority:'invalid'},auth,'PATCH')).status,400);
-  assert.equal((await post(operator+'/'+id,{status:'working',priority:'urgent',assignee:'Hardware'},auth,'PATCH')).status,200);
+  assert.equal((await post(operator+'/'+id,{status:'working',priority:'urgent',assignee:'Hardware',revision:result.incidents[0].revision},auth,'PATCH')).status,200);
+  assert.equal((await post(operator+'/'+id,{status:'open',revision:result.incidents[0].revision},auth,'PATCH')).status,409);
   assert.equal((await (await track(receipt.tracking)).json()).status,'working');
   assert.equal((await post(operator+'/'+id,{status:'resolved'},auth,'PATCH')).status,409);
   assert.equal((await post(operator+'/'+id,{status:'resolved',note:'Cable replaced'},auth,'PATCH')).status,200);
   const recurrence=await post('/api/reports',{lab:'innovation',description:'PC 3 monitor blank again'});
   assert.equal((await recurrence.json()).action,'reopened');
+  assert.equal((await post(triage+'/'+latest.id,{note:'Should refresh'},auth,'PATCH')).status,409);
   const detail=await (await fetch(url+operator+'/'+id,{headers:auth})).json();
   assert.equal(detail.reports.length,2);
   assert.equal(detail.repeats,1);
   assert.equal(detail.assignee,'Hardware');
   assert.equal(detail.priority,'urgent');
+  assert.ok(detail.events.some(event=>event.type==='copilot_reviewed'));
   const pending=await (await post('/api/reports',{lab:'innovation',description:'monitor blank by the window'})).json();
   const list=await (await fetch(url+operator+'?lab=innovation',{headers:auth})).json();
   const review=list.incidents.find(item=>item.status==='review');
@@ -132,4 +217,5 @@ test('the demo seed includes a genuine recurrence',t=>{
   store.seed();
   assert.equal(store.metrics('innovation').recurrences,1);
   assert.equal(store.list('innovation').find(item=>item.asset==='PC-17').report_count,3);
+  assert.equal(store.inventory('innovation').find(item=>item.id==='PC-06').offline,1);
 });
