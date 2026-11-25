@@ -1,6 +1,6 @@
 {
   "name": "labfix",
-  "version": "2.0.0",
+  "version": "2.2.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -10,6 +10,11 @@
     "start": "node server.mjs",
     "test": "node --test",
     "evaluate": "node eval/run.mjs",
-    "dev": "LABFIX_DEMO=1 LABFIX_DB=:memory: node server.mjs"
+    "dev": "LABFIX_DEMO=1 LABFIX_DB=:memory: node server.mjs",
+    "evaluate:copilot": "node eval/copilot.mjs"
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.94",
+    "ai": "^7.0.181"
   }
 }
