@@ -32,6 +32,12 @@ export function openStore(path) {
       id INTEGER PRIMARY KEY, lab TEXT NOT NULL, asset TEXT NOT NULL,
       offline INTEGER NOT NULL CHECK(offline IN (0,1)), note TEXT NOT NULL, created INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS triage_drafts (
+      id INTEGER PRIMARY KEY, incident INTEGER NOT NULL REFERENCES incidents(id),
+      base_revision INTEGER NOT NULL, last_report INTEGER NOT NULL, created INTEGER NOT NULL,
+      payload TEXT NOT NULL, reviewed INTEGER, review_note TEXT
+    );
+    CREATE INDEX IF NOT EXISTS triage_incident ON triage_drafts(incident,id DESC);
     CREATE INDEX IF NOT EXISTS workstation_history ON workstation_events(lab,asset,id DESC);
     CREATE INDEX IF NOT EXISTS incident_match ON incidents(lab,asset,fault,status,updated);
     CREATE INDEX IF NOT EXISTS report_incident ON reports(incident,id);
@@ -143,6 +149,7 @@ export function openStore(path) {
         return {error:'A review item can only be merged into an active incident in the same lab.'};
       db.prepare('UPDATE reports SET incident=? WHERE incident=?').run(target,id);
       db.prepare('UPDATE events SET incident=? WHERE incident=?').run(target,id);
+      db.prepare('UPDATE triage_drafts SET incident=?,base_revision=-1 WHERE incident=?').run(target,id);
       db.prepare('DELETE FROM incidents WHERE id=?').run(id);
       db.prepare('UPDATE incidents SET updated=?,revision=revision+1 WHERE id=?').run(now,target);
       event(target,'merged','Operator merged review item LF-'+id,now);
@@ -161,6 +168,55 @@ export function openStore(path) {
       .all(incident.lab,incident.asset,id) : [];
     return incident ? {...incident,history, reports:db.prepare('SELECT id,description,explanation,created FROM reports WHERE incident=? ORDER BY id DESC').all(id),
       events:db.prepare('SELECT * FROM events WHERE incident=? ORDER BY id DESC').all(id)} : null;
+  }
+  const latestReport = db.prepare('SELECT COALESCE(MAX(id),0) AS id FROM reports WHERE incident=?');
+  function copilotContext(id) {
+    const current = getIncident(id);
+    if (!current) return null;
+    const reports = db.prepare('SELECT id,description FROM reports WHERE incident=? ORDER BY id DESC LIMIT 3').all(id);
+    const repairs = current.asset ? db.prepare(`SELECT e.id,e.incident,e.note,e.created
+      FROM events e JOIN incidents i ON i.id=e.incident
+      WHERE i.lab=? AND i.asset=? AND i.fault=? AND e.type='resolved'
+      ORDER BY e.id DESC LIMIT 4`).all(current.lab,current.asset,current.fault) : [];
+    return {...current,reports,repairs,lastReport:reports[0]?.id ?? 0};
+  }
+  const readDrafts = db.prepare('SELECT * FROM triage_drafts WHERE incident=? ORDER BY id DESC LIMIT 8');
+  const readDraft = db.prepare('SELECT * FROM triage_drafts WHERE id=? AND incident=?');
+  function draftView(row,current,lastReport) {
+    const {payload,base_revision,last_report,...record} = row;
+    return {...record,...JSON.parse(payload),stale:base_revision!==current.revision || last_report!==lastReport};
+  }
+  function listDrafts(id) {
+    const current=getIncident(id);
+    if (!current) return null;
+    const lastReport=latestReport.get(id).id;
+    return readDrafts.all(id).map(row=>draftView(row,current,lastReport));
+  }
+  function saveDraft(ticket, payload, now = Date.now()) {
+    return transaction(()=>{
+      const current=getIncident(ticket.id);
+      if (!current) return null;
+      const lastReport=latestReport.get(ticket.id).id;
+      if (ticket.revision!==current.revision || ticket.lastReport!==lastReport)
+        return {error:'The incident received an update during analysis. Refresh and generate a new draft.'};
+      const draft=Number(db.prepare('INSERT INTO triage_drafts(incident,base_revision,last_report,created,payload) VALUES(?,?,?,?,?)')
+        .run(ticket.id,current.revision,lastReport,now,JSON.stringify(payload)).lastInsertRowid);
+      return draftView(readDraft.get(draft,ticket.id),current,lastReport);
+    });
+  }
+  function reviewDraft(id,draft,note,now = Date.now()) {
+    return transaction(()=>{
+      const row=readDraft.get(draft,id);
+      if (!row) return null;
+      const current=getIncident(id);
+      const lastReport=latestReport.get(id).id;
+      const view=draftView(row,current,lastReport);
+      if (view.reviewed!=null) return {error:'A review was already recorded for this draft.'};
+      if (view.stale) return {error:'A newer report or incident edit arrived. Generate a fresh draft before reviewing.'};
+      db.prepare('UPDATE triage_drafts SET reviewed=?,review_note=? WHERE id=?').run(now,note,draft);
+      event(id,'copilot_reviewed','Triage draft '+draft+' reviewed. '+note,now);
+      return draftView(readDraft.get(draft,id),current,lastReport);
+    });
   }
   function metrics(lab, now = Date.now()) {
     return db.prepare(`SELECT COUNT(*) FILTER(WHERE status IN ('open','working')) AS active,
@@ -236,5 +292,5 @@ export function openStore(path) {
     setAvailability('innovation','PC-06',true,'Reserved for a scheduled memory diagnostic.',now-90*60_000);
   }
   return {report,update,merge,list,detail,metrics,mapStatus,track,analytics,inventory,workstationHistory,setAvailability,
-    seed,close:()=>db.close()};
+    copilotContext,listDrafts,saveDraft,reviewDraft,seed,close:()=>db.close()};
 }
