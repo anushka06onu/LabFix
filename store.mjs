@@ -37,6 +37,12 @@ export function openStore(path) {
       base_revision INTEGER NOT NULL, last_report INTEGER NOT NULL, created INTEGER NOT NULL,
       payload TEXT NOT NULL, reviewed INTEGER, review_note TEXT
     );
+    CREATE TABLE IF NOT EXISTS lab_runbooks (
+      id INTEGER PRIMARY KEY, lab TEXT NOT NULL, fault TEXT NOT NULL, title TEXT NOT NULL,
+      keywords TEXT NOT NULL, summary TEXT NOT NULL, checks TEXT NOT NULL,
+      created INTEGER NOT NULL, archived INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS runbook_lab ON lab_runbooks(lab,archived,id);
     CREATE INDEX IF NOT EXISTS triage_incident ON triage_drafts(incident,id DESC);
     CREATE INDEX IF NOT EXISTS workstation_history ON workstation_events(lab,asset,id DESC);
     CREATE INDEX IF NOT EXISTS incident_match ON incidents(lab,asset,fault,status,updated);
@@ -48,6 +54,7 @@ export function openStore(path) {
   try {
     const incidentColumns = columns('incidents');
     const reportColumns = columns('reports');
+    if (!columns('triage_drafts').has('handoff')) db.exec('ALTER TABLE triage_drafts ADD COLUMN handoff TEXT');
     if (!incidentColumns.has('priority')) db.exec("ALTER TABLE incidents ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal'");
     if (!incidentColumns.has('assignee')) db.exec("ALTER TABLE incidents ADD COLUMN assignee TEXT NOT NULL DEFAULT ''");
     if (!incidentColumns.has('revision')) db.exec('ALTER TABLE incidents ADD COLUMN revision INTEGER NOT NULL DEFAULT 0');
@@ -112,31 +119,34 @@ export function openStore(path) {
   function update(id, patch, now = Date.now()) {
     return transaction(() => {
       const current = getIncident(id);
-      if (!current) return null;
-      if (patch.revision != null && patch.revision !== current.revision)
-        return {error:'This incident changed. Refresh before saving your update.'};
-      const {status, note} = patch;
-      const priority = patch.priority ?? current.priority;
-      const assignee = patch.assignee ?? current.assignee;
-      const asset = patch.asset === undefined ? current.asset : patch.asset;
-      const fault = patch.fault ?? current.fault;
-      if (status !== 'review' && (!asset || fault==='other')) return {error:'Select a workstation and a fault class first.'};
-      if (status === 'resolved' && current.status !== 'resolved' && !note) return {error:'Add a repair note before resolving.'};
-      if (['open','working'].includes(status)) {
-        const active = db.prepare("SELECT id FROM incidents WHERE id<>? AND lab=? AND asset=? AND fault=? AND status IN ('open','working') LIMIT 1").get(id,current.lab,asset,fault);
-        if (active) return {error:'An active incident already covers this workstation and fault.',existing:active.id};
-      }
-      const reopening = current.status==='resolved' && status!=='resolved';
-      const firstResponse = (reopening ? null : current.first_response) ?? (['working','resolved'].includes(status) ? now : null);
-      db.prepare('UPDATE incidents SET asset=?,fault=?,status=?,updated=?,resolved=?,priority=?,assignee=?,cycle_started=?,first_response=?,revision=revision+1 WHERE id=?')
-        .run(asset,fault,status,now,status==='resolved' ? current.resolved ?? now : null,priority,assignee,
-          reopening ? now : current.cycle_started,firstResponse,id);
-      if (reopening) event(id,'reopened','Operator reopened the incident',now);
-      if (priority !== current.priority) event(id,'priority','Priority set to ' + priority,now);
-      if (assignee !== current.assignee) event(id,'assignment',assignee ? 'Assigned to ' + assignee : 'Assignment cleared',now);
-      event(id,status,note || 'Operator updated the incident',now);
-      return getIncident(id);
+      return current ? updateIncident(current,patch,now) : null;
     });
+  }
+  function updateIncident(current, patch, now) {
+    const {id} = current;
+    if (patch.revision != null && patch.revision !== current.revision)
+      return {error:'This incident changed. Refresh before saving your update.'};
+    const {status, note} = patch;
+    const priority = patch.priority ?? current.priority;
+    const assignee = patch.assignee ?? current.assignee;
+    const asset = patch.asset === undefined ? current.asset : patch.asset;
+    const fault = patch.fault ?? current.fault;
+    if (status !== 'review' && (!asset || fault==='other')) return {error:'Select a workstation and a fault class first.'};
+    if (status === 'resolved' && current.status !== 'resolved' && !note) return {error:'Add a repair note before resolving.'};
+    if (['open','working'].includes(status)) {
+      const active = db.prepare("SELECT id FROM incidents WHERE id<>? AND lab=? AND asset=? AND fault=? AND status IN ('open','working') LIMIT 1").get(id,current.lab,asset,fault);
+      if (active) return {error:'An active incident already covers this workstation and fault.',existing:active.id};
+    }
+    const reopening = current.status==='resolved' && status!=='resolved';
+    const firstResponse = (reopening ? null : current.first_response) ?? (['working','resolved'].includes(status) ? now : null);
+    db.prepare('UPDATE incidents SET asset=?,fault=?,status=?,updated=?,resolved=?,priority=?,assignee=?,cycle_started=?,first_response=?,revision=revision+1 WHERE id=?')
+      .run(asset,fault,status,now,status==='resolved' ? current.resolved ?? now : null,priority,assignee,
+        reopening ? now : current.cycle_started,firstResponse,id);
+    if (reopening) event(id,'reopened','Operator reopened the incident',now);
+    if (priority !== current.priority) event(id,'priority','Priority set to ' + priority,now);
+    if (assignee !== current.assignee) event(id,'assignment',assignee ? 'Assigned to ' + assignee : 'Assignment cleared',now);
+    event(id,status,note || 'Operator updated the incident',now);
+    return getIncident(id);
   }
   function merge(id, target, now = Date.now(), revision) {
     return transaction(() => {
@@ -170,7 +180,7 @@ export function openStore(path) {
       events:db.prepare('SELECT * FROM events WHERE incident=? ORDER BY id DESC').all(id)} : null;
   }
   const latestReport = db.prepare('SELECT COALESCE(MAX(id),0) AS id FROM reports WHERE incident=?');
-  function copilotContext(id) {
+  function copilotContext(id, now=Date.now()) {
     const current = getIncident(id);
     if (!current) return null;
     const reports = db.prepare('SELECT id,description FROM reports WHERE incident=? ORDER BY id DESC LIMIT 3').all(id);
@@ -178,13 +188,18 @@ export function openStore(path) {
       FROM events e JOIN incidents i ON i.id=e.incident
       WHERE i.lab=? AND i.asset=? AND i.fault=? AND e.type='resolved'
       ORDER BY e.id DESC LIMIT 4`).all(current.lab,current.asset,current.fault) : [];
-    return {...current,reports,repairs,lastReport:reports[0]?.id ?? 0};
+    const related = current.fault==='other' ? [] : db.prepare(`SELECT i.asset,MAX(r.created) AS latest,COUNT(*) AS reports
+      FROM incidents i JOIN reports r ON r.incident=i.id
+      WHERE i.lab=? AND i.fault=? AND i.asset IS NOT NULL AND i.asset IS NOT ? AND r.created BETWEEN ? AND ?
+      GROUP BY i.asset ORDER BY latest DESC,i.asset`).all(current.lab,current.fault,current.asset,now-72*hour,now);
+    return {...current,reports,repairs,related,lastReport:reports[0]?.id ?? 0};
   }
   const readDrafts = db.prepare('SELECT * FROM triage_drafts WHERE incident=? ORDER BY id DESC LIMIT 8');
   const readDraft = db.prepare('SELECT * FROM triage_drafts WHERE id=? AND incident=?');
   function draftView(row,current,lastReport) {
-    const {payload,base_revision,last_report,...record} = row;
-    return {...record,...JSON.parse(payload),stale:base_revision!==current.revision || last_report!==lastReport};
+    const {payload,base_revision,last_report,handoff,...record} = row;
+    return {...record,...JSON.parse(payload),handoff:handoff ? JSON.parse(handoff) : null,
+      stale:base_revision!==current.revision || last_report!==lastReport};
   }
   function listDrafts(id) {
     const current=getIncident(id);
@@ -204,7 +219,7 @@ export function openStore(path) {
       return draftView(readDraft.get(draft,ticket.id),current,lastReport);
     });
   }
-  function reviewDraft(id,draft,note,now = Date.now()) {
+  function reviewDraft(id,draft,note,handoff=null,now = Date.now()) {
     return transaction(()=>{
       const row=readDraft.get(draft,id);
       if (!row) return null;
@@ -213,11 +228,43 @@ export function openStore(path) {
       const view=draftView(row,current,lastReport);
       if (view.reviewed!=null) return {error:'A review was already recorded for this draft.'};
       if (view.stale) return {error:'A newer report or incident edit arrived. Generate a fresh draft before reviewing.'};
-      db.prepare('UPDATE triage_drafts SET reviewed=?,review_note=? WHERE id=?').run(now,note,draft);
+      let updated=current;
+      if (handoff) {
+        if (!['open','working'].includes(current.status) || !current.asset || current.fault==='other')
+          return {error:'Confirm the incident’s workstation and fault before starting work.'};
+        const labSources=view.citations.filter(source=>/^LAB-\d+$/.test(source));
+        if (labSources.some(source=>!isPublished.get(current.lab,Number(source.slice(4)))))
+          return {error:'A cited runbook was archived. Generate a new draft before starting work.'};
+        updated=updateIncident(current,{...handoff,status:'working',note:'Started from triage draft '+draft+'.'},now);
+        if (updated.error) return updated;
+        event(id,'copilot_handoff','Assigned to '+handoff.assignee+' from draft '+draft+'.',now);
+      }
+      db.prepare('UPDATE triage_drafts SET reviewed=?,review_note=?,handoff=?,base_revision=? WHERE id=?')
+        .run(now,note,handoff ? JSON.stringify(handoff) : null,updated.revision,draft);
       event(id,'copilot_reviewed','Triage draft '+draft+' reviewed. '+note,now);
-      return draftView(readDraft.get(draft,id),current,lastReport);
+      return draftView(readDraft.get(draft,id),updated,lastReport);
     });
   }
+  const draftRunbook = row => row ? {...row,checks:JSON.parse(row.checks)} : null;
+  const getRunbook = db.prepare('SELECT * FROM lab_runbooks WHERE lab=? AND id=?');
+  const isPublished = db.prepare('SELECT id FROM lab_runbooks WHERE lab=? AND id=? AND archived IS NULL');
+  function addRunbook(lab,{fault,title,keywords,summary,checks},now=Date.now()) {
+    const id=Number(db.prepare('INSERT INTO lab_runbooks(lab,fault,title,keywords,summary,checks,created) VALUES(?,?,?,?,?,?,?)')
+      .run(lab,fault,title,keywords,summary,JSON.stringify(checks),now).lastInsertRowid);
+    return draftRunbook(getRunbook.get(lab,id));
+  }
+  function setRunbookArchive(lab,id,archived,now=Date.now()) {
+    return transaction(()=>{
+      const row=getRunbook.get(lab,id);
+      if (!row) return null;
+      if ((row.archived!=null)===archived) return draftRunbook(row);
+      db.prepare('UPDATE lab_runbooks SET archived=? WHERE lab=? AND id=?').run(archived ? now : null,lab,id);
+      return draftRunbook(getRunbook.get(lab,id));
+    });
+  }
+  const publishedRunbooks = () => db.prepare('SELECT * FROM lab_runbooks WHERE archived IS NULL ORDER BY id DESC').all().map(draftRunbook);
+  const archivedRunbooks = lab => db.prepare('SELECT * FROM lab_runbooks WHERE lab=? AND archived IS NOT NULL ORDER BY archived DESC,id DESC')
+    .all(lab).map(draftRunbook);
   function metrics(lab, now = Date.now()) {
     return db.prepare(`SELECT COUNT(*) FILTER(WHERE status IN ('open','working')) AS active,
       COUNT(*) FILTER(WHERE status='review') AS review, COUNT(*) FILTER(WHERE status='resolved') AS resolved,
@@ -288,9 +335,11 @@ export function openStore(path) {
     add('innovation',null,'ইন্টারনেট চলছে না, পেছনের দিকে বসেছিলাম',1620);
     const network = add('innovation','PC-10','PC-10 lost its network connection during class.',205);
     update(network.id,{status:'open',priority:'urgent',assignee:'Campus IT',note:'Ethernet disconnects repeatedly.'},now-190*60_000);
+    add('innovation','PC-04','PC-04 cannot reach the internet or campus site.',188);
     add('systems','PC-08','PC 8 internet is offline.',75);
     setAvailability('innovation','PC-06',true,'Reserved for a scheduled memory diagnostic.',now-90*60_000);
   }
   return {report,update,merge,list,detail,metrics,mapStatus,track,analytics,inventory,workstationHistory,setAvailability,
-    copilotContext,listDrafts,saveDraft,reviewDraft,seed,close:()=>db.close()};
+    copilotContext,listDrafts,saveDraft,reviewDraft,addRunbook,setRunbookArchive,publishedRunbooks,archivedRunbooks,seed,
+    healthy:()=>db.prepare('SELECT 1 AS ok').get().ok===1,close:()=>db.close()};
 }
