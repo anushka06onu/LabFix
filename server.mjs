@@ -5,22 +5,34 @@ import {dirname} from 'node:path';
 import {openStore,labs,statuses,responseHours} from './store.mjs';
 import {assets,faults} from './matching.mjs';
 import {createCopilot,focusLabels,modelFromEnv} from './copilot.mjs';
-import {knowledge,libraryVersion,openKnowledge} from './knowledge.mjs';
+import {labRunbook,libraryVersion,openKnowledge} from './knowledge.mjs';
 
 const demo = process.env.LABFIX_DEMO === '1';
 const token = process.env.LABFIX_OPERATOR_TOKEN || '';
 if (!demo && token.length < 24) throw new Error('Set LABFIX_OPERATOR_TOKEN to at least 24 characters, or enable the local demo.');
 const base = new URL('./public/',import.meta.url);
 const files = {'/':['index.html','text/html'],'/app.js':['app.js','text/javascript'],'/app.css':['app.css','text/css'],
-  '/agent-ui.js':['agent-ui.js','text/javascript'],'/matching.mjs':['../matching.mjs','text/javascript']};
+  '/agent-ui.js':['agent-ui.js','text/javascript'],'/matching.mjs':['../matching.mjs','text/javascript'],
+  '/lab-hero.jpg':['lab-hero.jpg','image/jpeg']};
 const dbPath = process.env.LABFIX_DB || (demo ? './data/demo.sqlite' : './data/labfix.sqlite');
 if (dbPath !== ':memory:') mkdirSync(dirname(dbPath),{recursive:true});
 const store = openStore(dbPath);
 if (demo) store.seed();
-const evidenceIndex = openKnowledge();
+const evidenceIndex = openKnowledge(store.publishedRunbooks());
 const inference = modelFromEnv();
 const draftTriage = createCopilot(evidenceIndex,inference);
 let copilotBusy = false;
+let modelProbe;
+let lastModelStatus;
+async function modelStatus() {
+  if (lastModelStatus && Date.now()-lastModelStatus.checkedAt<15_000) return lastModelStatus;
+  if (!modelProbe) {
+    modelProbe=(inference ? inference.check() : Promise.resolve('evidence'))
+      .then(status=>lastModelStatus={status,model:inference?.id??null,checkedAt:Date.now()})
+      .finally(()=>{modelProbe=null;});
+  }
+  return modelProbe;
+}
 const headers = {
   'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer',
   'Content-Security-Policy':"default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
@@ -75,11 +87,14 @@ const server = createServer({requestTimeout:15000}, async (req,res) => {
     const method = req.method;
     if (method==='GET' && Object.hasOwn(files,pathname)) {
       const [filename,type] = files[pathname];
-      res.writeHead(200,{...headers,'Content-Type':type+'; charset=utf-8'});
+      res.writeHead(200,{...headers,'Content-Type':type.startsWith('image/') ? type : type+'; charset=utf-8'});
       res.end(readFileSync(new URL(filename,base)));
       return;
     }
-    if (method==='GET' && pathname==='/healthz') return send(res,200,{status:'ok'});
+    if (method==='GET' && pathname==='/healthz') {
+      const ready=store.healthy();
+      return send(res,ready?200:503,{status:ready?'ok':'unavailable'});
+    }
     if (method==='GET' && pathname==='/api/config') return send(res,200,{labs,assets:assets(),faults,responseHours,demo,
       copilot:{model:inference?.id || null,focus:focusLabels}});
     if (method==='GET' && pathname==='/api/evaluation') {
@@ -111,12 +126,40 @@ const server = createServer({requestTimeout:15000}, async (req,res) => {
     }
     if (pathname.startsWith('/api/operator/')) {
       if (!authorized(req)) return send(res,allowed(req,'auth',25) ? 401 : 429,{error:'Operator access required.'});
-      if (method==='GET' && pathname==='/api/operator/knowledge') {
-        const query=url.searchParams.get('q')?.trim().slice(0,160);
-        const fault=url.searchParams.get('fault');
-        if (fault && !Object.hasOwn(faults,fault)) return send(res,400,{error:'Unknown fault category.'});
-        const entries=query ? evidenceIndex.search(query,fault || null,{fallback:false}) : knowledge.filter(item=>!fault || item.fault===fault);
-        return send(res,200,{entries,version:libraryVersion});
+      if (method==='GET' && pathname==='/api/operator/copilot/status') return send(res,200,await modelStatus());
+      const runbookRoute=pathname.match(/^\/api\/operator\/knowledge(?:\/LAB-(\d{1,12}))?$/);
+      if (runbookRoute) {
+        const lab=url.searchParams.get('lab');
+        if (lab && !labValid(lab)) return send(res,400,{error:'Unknown lab.'});
+        if (method==='GET' && !runbookRoute[1]) {
+          const query=url.searchParams.get('q')?.trim().slice(0,160);
+          const fault=url.searchParams.get('fault');
+          if (fault && !Object.hasOwn(faults,fault)) return send(res,400,{error:'Unknown fault category.'});
+          const entries=query ? evidenceIndex.search(query,fault || null,{lab,fallback:false,limit:30}) : evidenceIndex.list(lab,fault);
+          const archived=lab ? store.archivedRunbooks(lab).map(labRunbook) : [];
+          return send(res,200,{entries,archived,version:libraryVersion});
+        }
+        if (method==='POST' && !runbookRoute[1]) {
+          if (!labValid(lab)) return send(res,400,{error:'Select the lab for this runbook.'});
+          const {data,status}=await readBody(req);
+          if (!data) return send(res,status,{error:'Invalid runbook.'});
+          const fields=['fault','title','keywords','summary'];
+          const values=Object.fromEntries(fields.map(key=>[key,typeof data[key]==='string' ? data[key].trim() : '']));
+          const checks=Array.isArray(data.checks) ? data.checks.map(check=>typeof check==='string' ? check.trim() : '') : [];
+          if (!Object.hasOwn(faults,values.fault) || values.title.length<5 || values.title.length>100 ||
+            values.summary.length<12 || values.summary.length>500 || values.keywords.length>180 ||
+            checks.length<2 || checks.length>5 || checks.some(check=>check.length<8 || check.length>200) ||
+            new Set(checks).size!==checks.length) return send(res,400,{error:'Enter a fault category, title, summary, and 2–5 distinct diagnostic checks.'});
+          return send(res,201,evidenceIndex.register(store.addRunbook(lab,{...values,checks})));
+        }
+        if (method==='PATCH' && runbookRoute[1]) {
+          if (!labValid(lab)) return send(res,400,{error:'Select the lab for this runbook.'});
+          const {data,status}=await readBody(req);
+          if (!data) return send(res,status,{error:'Invalid runbook update.'});
+          if (typeof data.archived!=='boolean') return send(res,400,{error:'Choose whether the runbook is archived.'});
+          const row=store.setRunbookArchive(lab,Number(runbookRoute[1]),data.archived);
+          return row ? send(res,200,evidenceIndex.register(row)) : send(res,404,{error:'Runbook not found.'});
+        }
       }
       const triage = pathname.match(/^\/api\/operator\/incidents\/(\d{1,12})\/triage(?:\/(\d{1,12}))?$/);
       if (triage) {
@@ -130,7 +173,15 @@ const server = createServer({requestTimeout:15000}, async (req,res) => {
           if (!data) return send(res,status,{error:'Invalid review.'});
           const note = typeof data.note==='string' ? data.note.trim() : '';
           if (!note || note.length>500) return send(res,400,{error:'Enter a review note of up to 500 characters.'});
-          const draft = store.reviewDraft(id,Number(triage[2]),note);
+          let handoff=null;
+          if (data.handoff!=null) {
+            const assignee=typeof data.handoff.assignee==='string' ? data.handoff.assignee.trim() : '';
+            const priority=data.handoff.priority;
+            if (!assignee || assignee.length>60 || typeof priority!=='string' || !Object.hasOwn(responseHours,priority))
+              return send(res,400,{error:'Choose an assignee and priority for the handoff.'});
+            handoff={assignee,priority};
+          }
+          const draft = store.reviewDraft(id,Number(triage[2]),note,handoff);
           return send(res,draft ? (draft.error?409:200) : 404,draft || {error:'Triage draft not found.'});
         }
         if (method==='POST' && !triage[2]) {
@@ -180,7 +231,7 @@ const server = createServer({requestTimeout:15000}, async (req,res) => {
         if (method==='GET' && !route[2]) {
           const result = store.detail(id);
           if (!result) return send(res,404,{error:'Incident not found.'});
-          const checklist=knowledge.find(item=>item.fault===result.fault)?.checks??[];
+          const checklist=evidenceIndex.list(result.lab,result.fault)[0]?.checks??[];
           return send(res,200,{...result,checklist});
         }
         if ((method==='PATCH' && !route[2]) || (method==='POST' && route[2])) {
