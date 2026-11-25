@@ -72,11 +72,17 @@ test('incidents persist after a new database connection',t=>{
     const {id}=issue(first,'PC 2 monitor blank');
     first.setAvailability('innovation','PC-02',true,'Awaiting a monitor replacement',1);
     first.setAvailability('innovation','PC-02',false,'Replacement verified',2);
+    const saved=first.addRunbook('innovation',{fault:'display',title:'Monitor repair reference',keywords:'monitor',
+      summary:'Check connections before requesting replacement.',checks:['Record the indicator state.','Confirm the correct display input.']},3);
     first.close();
     const second=openStore(path);
     assert.equal(second.detail(id).asset,'PC-02');
     assert.deepEqual(second.workstationHistory('innovation','PC-02').map(row=>row.offline),[0,1]);
     assert.deepEqual(second.workstationHistory('systems','PC-02'),[]);
+    assert.equal(second.publishedRunbooks()[0].id,saved.id);
+    second.setRunbookArchive('innovation',saved.id,true,4);
+    assert.deepEqual(second.publishedRunbooks(),[]);
+    assert.equal(second.archivedRunbooks('innovation')[0].archived,4);
     second.close();
   } finally {rmSync(folder,{recursive:true,force:true});}
 });
@@ -127,7 +133,7 @@ test('earlier databases recover the current response cycle from the event log',t
 test('production HTTP flow, input validation, and operator access',{timeout:15000},async t=>{
   const token='a-test-operator-token-long-enough';
   const child=spawn(process.execPath,['server.mjs'],{cwd:new URL('../',import.meta.url),
-    env:{...process.env,PORT:'0',HOST:'127.0.0.1',LABFIX_DB:':memory:',LABFIX_DEMO:'0',LABFIX_OPERATOR_TOKEN:token}});
+    env:{...process.env,PORT:'0',HOST:'127.0.0.1',LABFIX_DB:':memory:',LABFIX_DEMO:'0',LABFIX_OPERATOR_TOKEN:token,LABFIX_MODEL:''}});
   t.after(()=>child.kill());
   const [data]=await once(child.stdout,'data');
   const url=String(data).match(/http:\/\/127\.0\.0\.1:\d+/)[0];
@@ -145,6 +151,9 @@ test('production HTTP flow, input validation, and operator access',{timeout:1500
   assert.equal((await fetch(url+knowledge)).status,401);
   const library=await (await fetch(url+knowledge,{headers:auth})).json();
   assert.equal(library.entries[0].id,'KB-D02');
+  const modelStatus='/api/operator/copilot/status';
+  assert.equal((await fetch(url+modelStatus)).status,401);
+  assert.equal((await (await fetch(url+modelStatus,{headers:auth})).json()).status,'evidence');
   const workstation='/api/operator/workstations/PC-03?lab=innovation';
   assert.equal((await fetch(url+workstation)).status,401);
   assert.equal((await post(workstation,{offline:true,note:'Private service note'}, {},'PATCH')).status,401);
@@ -211,6 +220,43 @@ test('production HTTP flow, input validation, and operator access',{timeout:1500
   assert.equal(merged.report,pending.report);
   assert.equal(merged.asset,'PC-03');
   assert.equal(merged.status,'open');
+  const runbook='/api/operator/knowledge';
+  const bookRequest={fault:'display',title:'DisplayDock trace procedure',keywords:'displaydock',
+    summary:'DisplayDock reports show no signal during the first class of the day.',
+    checks:['Confirm the active Dock input on the external screen.','Record the external display indicator for the repair log.']};
+  assert.equal((await post(runbook+'?lab=innovation',bookRequest)).status,401);
+  const bookResponse=await post(runbook+'?lab=innovation',bookRequest,auth);
+  assert.equal(bookResponse.status,201);
+  const book=await bookResponse.json();
+  const results=async lab=>(await (await fetch(url+runbook+'?q=displaydock&lab='+lab,{headers:auth})).json()).entries;
+  assert.deepEqual((await results('innovation')).map(entry=>entry.id),[book.id]);
+  assert.deepEqual(await results('systems'),[]);
+  const specialResponse=await post('/api/reports',{lab:'innovation',description:'PC 4 monitor DisplayDock trace procedure needed.'});
+  const special=await specialResponse.json();
+  const listAfter=await (await fetch(url+operator+'?lab=innovation',{headers:auth})).json();
+  const specific=listAfter.incidents.find(row=>row.asset==='PC-04');
+  const specialTriage=operator+'/'+specific.id+'/triage';
+  const sourceDraft=await (await post(specialTriage,{focus:'triage'},auth)).json();
+  assert.equal(sourceDraft.citations[0],book.id);
+  const archive=lab=>post(runbook+'/'+book.id+'?lab='+lab,{archived:true},auth,'PATCH');
+  assert.equal((await archive('systems')).status,404);
+  assert.equal((await archive('innovation')).status,200);
+  assert.deepEqual(await results('innovation'),[]);
+  const handoff={note:'Check the external display input.',handoff:{assignee:'Hardware',priority:'high'}};
+  assert.equal((await post(specialTriage+'/'+sourceDraft.id,handoff,auth,'PATCH')).status,409);
+  assert.equal((await (await track(special.tracking)).json()).status,'open');
+  const fresh=await (await post(specialTriage,{focus:'triage'},auth)).json();
+  const accepted=await post(specialTriage+'/'+fresh.id,handoff,auth,'PATCH');
+  assert.equal(accepted.status,200);
+  assert.deepEqual((await accepted.json()).handoff,handoff.handoff);
+  assert.equal((await post(specialTriage+'/'+fresh.id,handoff,auth,'PATCH')).status,409);
+  const handedOff=await (await fetch(url+operator+'/'+specific.id,{headers:auth})).json();
+  assert.equal(handedOff.assignee,'Hardware');
+  assert.equal(handedOff.priority,'high');
+  assert.ok(handedOff.events.some(event=>event.type==='copilot_handoff'));
+  assert.equal((await (await track(special.tracking)).json()).status,'working');
+  assert.equal((await post(runbook+'/'+book.id+'?lab=innovation',{archived:false},auth,'PATCH')).status,200);
+  assert.equal((await results('innovation'))[0].id,book.id);
 });
 test('the demo seed includes a genuine recurrence',t=>{
   const store=fixture(t);
@@ -218,4 +264,6 @@ test('the demo seed includes a genuine recurrence',t=>{
   assert.equal(store.metrics('innovation').recurrences,1);
   assert.equal(store.list('innovation').find(item=>item.asset==='PC-17').report_count,3);
   assert.equal(store.inventory('innovation').find(item=>item.id==='PC-06').offline,1);
+  const network=store.list('innovation').find(item=>item.asset==='PC-10');
+  assert.deepEqual(store.copilotContext(network.id).related.map(item=>item.asset),['PC-04']);
 });
