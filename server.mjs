@@ -2,21 +2,29 @@ import {createServer} from 'node:http';
 import {timingSafeEqual,createHash} from 'node:crypto';
 import {readFileSync,mkdirSync} from 'node:fs';
 import {dirname} from 'node:path';
-import {openStore,labs,statuses} from './store.mjs';
+import {openStore,labs,statuses,responseHours} from './store.mjs';
 import {assets,faults} from './matching.mjs';
+import {createCopilot,focusLabels,modelFromEnv} from './copilot.mjs';
+import {knowledge,libraryVersion,openKnowledge} from './knowledge.mjs';
 
 const demo = process.env.LABFIX_DEMO === '1';
 const token = process.env.LABFIX_OPERATOR_TOKEN || '';
 if (!demo && token.length < 24) throw new Error('Set LABFIX_OPERATOR_TOKEN to at least 24 characters, or enable the local demo.');
 const base = new URL('./public/',import.meta.url);
-const files = {'/':['index.html','text/html'],'/app.js':['app.js','text/javascript'],'/app.css':['app.css','text/css'],'/matching.mjs':['../matching.mjs','text/javascript']};
+const files = {'/':['index.html','text/html'],'/app.js':['app.js','text/javascript'],'/app.css':['app.css','text/css'],
+  '/agent-ui.js':['agent-ui.js','text/javascript'],'/matching.mjs':['../matching.mjs','text/javascript']};
 const dbPath = process.env.LABFIX_DB || (demo ? './data/demo.sqlite' : './data/labfix.sqlite');
 if (dbPath !== ':memory:') mkdirSync(dirname(dbPath),{recursive:true});
 const store = openStore(dbPath);
 if (demo) store.seed();
+const evidenceIndex = openKnowledge();
+const inference = modelFromEnv();
+const draftTriage = createCopilot(evidenceIndex,inference);
+let copilotBusy = false;
 const headers = {
   'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer',
   'Content-Security-Policy':"default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+  'Permissions-Policy':'camera=(), microphone=(), geolocation=()',
   'Cache-Control':'no-store'
 };
 const send = (res,status,body) => {
@@ -72,7 +80,12 @@ const server = createServer({requestTimeout:15000}, async (req,res) => {
       return;
     }
     if (method==='GET' && pathname==='/healthz') return send(res,200,{status:'ok'});
-    if (method==='GET' && pathname==='/api/config') return send(res,200,{labs,assets:assets(),faults,demo});
+    if (method==='GET' && pathname==='/api/config') return send(res,200,{labs,assets:assets(),faults,responseHours,demo,
+      copilot:{model:inference?.id || null,focus:focusLabels}});
+    if (method==='GET' && pathname==='/api/evaluation') {
+      const metrics = file => JSON.parse(readFileSync(new URL('./eval/'+file,import.meta.url),'utf8')).metrics;
+      return send(res,200,{original:metrics('results.json'),challenge:metrics('challenge-results.json')});
+    }
     if (method==='GET' && pathname==='/api/map') {
       const lab = url.searchParams.get('lab');
       return labValid(lab) ? send(res,200,{status:store.mapStatus(lab)}) : send(res,400,{error:'Unknown lab.'});
@@ -98,34 +111,96 @@ const server = createServer({requestTimeout:15000}, async (req,res) => {
     }
     if (pathname.startsWith('/api/operator/')) {
       if (!authorized(req)) return send(res,allowed(req,'auth',25) ? 401 : 429,{error:'Operator access required.'});
+      if (method==='GET' && pathname==='/api/operator/knowledge') {
+        const query=url.searchParams.get('q')?.trim().slice(0,160);
+        const fault=url.searchParams.get('fault');
+        if (fault && !Object.hasOwn(faults,fault)) return send(res,400,{error:'Unknown fault category.'});
+        const entries=query ? evidenceIndex.search(query,fault || null,{fallback:false}) : knowledge.filter(item=>!fault || item.fault===fault);
+        return send(res,200,{entries,version:libraryVersion});
+      }
+      const triage = pathname.match(/^\/api\/operator\/incidents\/(\d{1,12})\/triage(?:\/(\d{1,12}))?$/);
+      if (triage) {
+        const id = Number(triage[1]);
+        if (method==='GET' && !triage[2]) {
+          const drafts = store.listDrafts(id);
+          return send(res,drafts ? 200 : 404,drafts ? {drafts} : {error:'Incident not found.'});
+        }
+        if (method==='PATCH' && triage[2]) {
+          const {data,status} = await readBody(req);
+          if (!data) return send(res,status,{error:'Invalid review.'});
+          const note = typeof data.note==='string' ? data.note.trim() : '';
+          if (!note || note.length>500) return send(res,400,{error:'Enter a review note of up to 500 characters.'});
+          const draft = store.reviewDraft(id,Number(triage[2]),note);
+          return send(res,draft ? (draft.error?409:200) : 404,draft || {error:'Triage draft not found.'});
+        }
+        if (method==='POST' && !triage[2]) {
+          if (!allowed(req,'copilot',10)) return send(res,429,{error:'Please wait before generating another draft.'});
+          const {data,status} = await readBody(req);
+          if (!data) return send(res,status,{error:'Invalid triage request.'});
+          const {focus} = data;
+          if (typeof focus!=='string' || !Object.hasOwn(focusLabels,focus))
+            return send(res,400,{error:'Choose a triage focus.'});
+          const ticket = store.copilotContext(id);
+          if (!ticket) return send(res,404,{error:'Incident not found.'});
+          if (copilotBusy) return send(res,429,{error:'A triage draft is already running. Try again shortly.'});
+          const disconnected = new AbortController();
+          res.once('close',()=>disconnected.abort());
+          copilotBusy=true;
+          try {
+            const result=await draftTriage(ticket,focus,AbortSignal.any([AbortSignal.timeout(65_000),disconnected.signal]));
+            if (res.destroyed) return;
+            const draft=store.saveDraft(ticket,result);
+            return send(res,draft ? (draft.error?409:201) : 404,draft || {error:'Incident not found.'});
+          } finally {copilotBusy=false;}
+        }
+      }
       if (method==='GET' && pathname==='/api/operator/incidents') {
         const lab = url.searchParams.get('lab');
         if (!labValid(lab)) return send(res,400,{error:'Unknown lab.'});
-        return send(res,200,{incidents:store.list(lab),metrics:store.metrics(lab),analytics:store.analytics(lab)});
+        return send(res,200,{incidents:store.list(lab),metrics:store.metrics(lab),analytics:store.analytics(lab),
+          workstations:store.inventory(lab)});
+      }
+      const workstation = pathname.match(/^\/api\/operator\/workstations\/(PC-\d{2})$/);
+      if (workstation && ['GET','PATCH'].includes(method)) {
+        const lab = url.searchParams.get('lab');
+        const asset = workstation[1];
+        if (!labValid(lab) || !assetValid(asset)) return send(res,400,{error:'Choose a valid lab and workstation.'});
+        if (method==='GET') return send(res,200,{history:store.workstationHistory(lab,asset)});
+        const {data,status} = await readBody(req);
+        if (!data) return send(res,status,{error:'Invalid availability update.'});
+        const note = typeof data.note==='string' ? data.note.trim() : '';
+        if (typeof data.offline!=='boolean' || !note || note.length>500)
+          return send(res,400,{error:'Add an availability note of up to 500 characters.'});
+        const result = store.setAvailability(lab,asset,data.offline,note);
+        return send(res,result.error ? 409 : 200,result);
       }
       const route = pathname.match(/^\/api\/operator\/incidents\/(\d{1,12})(\/merge)?$/);
       if (route) {
         const id = Number(route[1]);
         if (method==='GET' && !route[2]) {
           const result = store.detail(id);
-          return send(res,result ? 200 : 404,result || {error:'Incident not found.'});
+          if (!result) return send(res,404,{error:'Incident not found.'});
+          const checklist=knowledge.find(item=>item.fault===result.fault)?.checks??[];
+          return send(res,200,{...result,checklist});
         }
         if ((method==='PATCH' && !route[2]) || (method==='POST' && route[2])) {
           const {data,status} = await readBody(req);
           if (!data) return send(res,status,{error:'Invalid update.'});
+          if (data.revision!=null && (!Number.isSafeInteger(data.revision) || data.revision<0))
+            return send(res,400,{error:'Invalid incident revision.'});
           let result;
           if (route[2]) {
             if (!Number.isSafeInteger(data.target) || data.target<1) return send(res,400,{error:'Enter a valid destination incident ID.'});
-            result = store.merge(id,data.target);
+            result = store.merge(id,data.target,Date.now(),data.revision);
           } else {
             const {status:next,asset,fault,priority,assignee} = data;
             const note = typeof data.note==='string' ? data.note.trim() : '';
             if (!statuses.includes(next) || (asset!=null && !assetValid(asset)) ||
               (fault!=null && !Object.hasOwn(faults,fault)) || note.length>500 ||
-              (priority!=null && !['normal','high','urgent'].includes(priority)) ||
+              (priority!=null && (typeof priority!=='string' || !Object.hasOwn(responseHours,priority))) ||
               (assignee!=null && (typeof assignee!=='string'||assignee.length>60)))
               return send(res,400,{error:'Check the workstation, status, and repair note.'});
-            result = store.update(id,{status:next,asset,fault,note,priority,assignee:assignee?.trim()});
+            result = store.update(id,{status:next,asset,fault,note,priority,assignee:assignee?.trim(),revision:data.revision});
           }
           return send(res,result ? (result.error ? 409 : 200) : 404,result || {error:'Incident not found.'});
         }
@@ -142,4 +217,8 @@ const host = demo ? '127.0.0.1' : (process.env.HOST || '127.0.0.1');
 const portFlag = process.argv.indexOf('--port');
 const port = portFlag >= 0 ? process.argv[portFlag+1] : process.env.PORT ?? 8080;
 server.listen(Number(port),host,()=>console.log('LabFix ready http://'+host+':'+server.address().port));
-for (const signal of ['SIGINT','SIGTERM']) process.once(signal,()=>server.close(()=>{store.close();process.exit(0);}));
+for (const signal of ['SIGINT','SIGTERM']) process.once(signal,()=>server.close(()=>{
+  evidenceIndex.close();
+  store.close();
+  process.exit(0);
+}));
