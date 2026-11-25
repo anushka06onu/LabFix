@@ -1,13 +1,14 @@
 import {matchReport} from '/matching.mjs';
-import {buildCopilotPanel} from '/agent-ui.js';
+import {buildCopilotPanel,modelBadge} from '/agent-ui.js';
 
 const get = id => document.getElementById(id);
 const labels = {open:'Open',working:'In progress',review:'Needs review',resolved:'Resolved',created:'Opened',linked:'Report linked',
-  reopened:'Reopened after repair',merged:'Merged',priority:'Priority changed',assignment:'Assignment changed',copilot_reviewed:'Triage draft reviewed'};
+  reopened:'Reopened after repair',merged:'Merged',priority:'Priority changed',assignment:'Assignment changed',
+  copilot_reviewed:'Triage draft reviewed',copilot_handoff:'Repair handoff'};
 const state = {
   config:null, view:'report', deskView:'queue', asset:null, token:'', incidents:[], workstations:[],
   active:null, workstation:null, key:null, busy:false, visible:[], map:new Map(), mapReady:false,
-  mapRequest:0, queueRequest:0, detailRequest:0, workstationRequest:0, knowledgeRequest:0,
+  mapRequest:0, queueRequest:0, detailRequest:0, workstationRequest:0, knowledgeRequest:0, modelRequest:0, connection:null,
   mapFilter:'all', priority:'all', receipts:[], evaluation:null, incidentPanel:'copilot',
 };
 const mapFilters = {all:'filterAllSeats',attention:'filterActiveSeats',clear:'filterClearSeats'};
@@ -234,6 +235,7 @@ async function refresh() {
     drawQueue();
     drawAnalytics(result.analytics);
     drawInventory();
+    if (!state.connection || Date.now()-state.connection.checkedAt>30_000) checkModel();
     if (state.deskView==='knowledge') await drawKnowledge();
   } catch(error) {
     if(request!==state.queueRequest) return;
@@ -244,6 +246,28 @@ async function refresh() {
       get('desk').hidden=true;
       setMessage('loginMessage','The operator token was rejected.');
     } else setMessage('globalMessage',error.message);
+  }
+}
+async function checkModel(force=false) {
+  const button=get('checkModel');
+  if (button.disabled && !force) return;
+  const request=++state.modelRequest;
+  button.disabled=true;
+  try {
+    const status=await api('/api/operator/copilot/status');
+    if (request!==state.modelRequest) return;
+    state.connection=status;
+    const info=status.model ? status.model+' · Checked '+date(status.checkedAt) : 'Runbook evidence is available for manual triage.';
+    setMessage('modelConnectionInfo',info);
+  } catch {
+    if (request!==state.modelRequest) return;
+    state.connection={status:'unavailable',checkedAt:Date.now()};
+    setMessage('modelConnectionInfo','Could not check the inference endpoint.');
+  } finally {
+    if (request===state.modelRequest) {
+      button.disabled=false;
+      for (const badge of document.querySelectorAll('[data-model-state]')) modelBadge(badge,state.connection.status);
+    }
   }
 }
 function field(label,id,entries,selected) {
@@ -364,15 +388,21 @@ async function openDetail(id) {
       timeline('Student reports',item.reports,report=>[report.explanation,report.description]),
       timeline('Repair history',events,event=>[labels[event.type]||event.type,event.note]));
     renderHistory(item.events);
-    const onReview=async()=>{
+    const onReview=async draft=>{
       try {
+        if (draft.handoff) {
+          await refresh();
+          if (request===state.detailRequest) await openDetail(item.id);
+          return;
+        }
         const updated=await api('/api/operator/incidents/'+item.id);
         if (request===state.detailRequest) renderHistory(updated.events);
       } catch (error) {
         if (request===state.detailRequest) history.prepend(el('p','Refresh to load the latest repair history.','feedback'));
       }
     };
-    const copilot=buildCopilotPanel({incident:item,config:state.config.copilot,api,el,action,date,toast,onReview});
+    const copilot=buildCopilotPanel({incident:item,config:state.config.copilot,connection:state.connection?.status,
+      api,el,action,date,toast,onReview});
     const chips=el('div','','case-tabs');
     chips.setAttribute('role','group');
     chips.setAttribute('aria-label','Incident workspace');
@@ -410,28 +440,53 @@ function setDeskView(view) {
 }
 async function drawKnowledge() {
   const request=++state.knowledgeRequest;
-  const query=new URLSearchParams({q:get('knowledgeSearch').value,fault:get('knowledgeFault').value});
+  const lab=get('lab').value;
+  const query=new URLSearchParams({q:get('knowledgeSearch').value,fault:get('knowledgeFault').value,lab});
   const output=get('knowledgeResults');
+  get('runbookForm').querySelector('button').textContent='Publish to '+state.config.labs.find(entry=>entry.id===lab).name;
   try {
-    const {entries,version}=await api('/api/operator/knowledge?'+query);
+    const {entries,version,archived}=await api('/api/operator/knowledge?'+query);
     if (request!==state.knowledgeRequest) return;
     setMessage('knowledgeCount',entries.length+' runbooks · Library '+version);
-    output.replaceChildren(...entries.map(entry=>{
-      const card=el('article','','knowledge-card');
-      const code=el('div','','knowledge-card-meta');
-      code.append(el('span',entry.id,'source-code'),el('span',state.config.faults[entry.fault],'pill normal'));
-      const details=el('details','','knowledge-checks');
-      details.append(el('summary','Diagnostic checks'));
-      const list=el('ol');
-      for (const check of entry.checks) list.append(el('li',check.text));
-      details.append(list);
-      card.append(code,el('h3',entry.title),el('p',entry.summary,'muted'),details);
-      return card;
-    }));
+    output.replaceChildren(...entries.map(entry=>runbookCard(entry,lab)));
+    const archive=archived||[];
+    get('archivedRunbooks').hidden=!archive.length;
+    get('archivedRunbookResults').replaceChildren(...archive.map(entry=>runbookCard(entry,lab)));
     if (!entries.length) output.append(el('p','No runbooks matched those symptoms.','muted'));
   } catch(error) {
     if (request===state.knowledgeRequest) output.replaceChildren(el('p',error.message,'feedback'));
   }
+}
+function runbookCard(entry,lab) {
+  const card=el('article','','knowledge-card');
+  const code=el('div','','knowledge-card-meta');
+  code.append(el('span',entry.id,'source-code'),el('span',state.config.faults[entry.fault],'pill normal'));
+  const details=el('details','','knowledge-checks');
+  details.append(el('summary','Diagnostic checks'));
+  const list=el('ol');
+  for (const check of entry.checks) list.append(el('li',check.text));
+  details.append(list);
+  card.append(code,el('h3',entry.title),el('p',entry.summary,'muted'),details);
+  if (!entry.lab) return card;
+  card.classList.add('lab-runbook');
+  const footer=el('div','','runbook-actions');
+  const archive=entry.archived==null;
+  const label=archive?'Archive runbook':'Restore runbook';
+  const button=action(label,async()=>{
+    button.disabled=true;
+    try {
+      await api('/api/operator/knowledge/'+entry.id+'?lab='+encodeURIComponent(lab),{method:'PATCH',body:{archived:archive}});
+      if (get('lab').value===lab && state.view==='operator') {
+        await drawKnowledge();
+        toast(archive?'Runbook archived.':'Runbook restored.');
+      }
+    } catch(error) {setMessage('runbookMessage',error.message);get('runbookEditor').open=true;}
+    finally {button.disabled=false;}
+  },'quiet');
+  button.setAttribute('aria-label',label+' · '+entry.title);
+  footer.append(el('small','Lab runbook','muted'),button);
+  card.append(footer);
+  return card;
 }
 function drawInventory() {
   const offline=state.workstations.filter(item=>item.offline).length;
@@ -496,11 +551,17 @@ async function openWorkstation(asset) {
 function clearOperator() {
   state.queueRequest++;
   state.knowledgeRequest++;
+  state.modelRequest++;
+  state.connection=null;
+  get('checkModel').disabled=false;
+  setMessage('modelConnectionInfo','Checking inference…');
+  for (const badge of document.querySelectorAll('[data-model-state]')) modelBadge(badge,'checking');
   state.incidents=[];
   state.workstations=[];
   state.visible=[];
   get('desk').hidden=true;
-  for (const id of ['metrics','queue','inventory','trend','faultBars','busiest','knowledgeResults','knowledgeCount']) get(id).replaceChildren();
+  for (const id of ['metrics','queue','inventory','trend','faultBars','busiest','knowledgeResults','knowledgeCount','archivedRunbookResults']) get(id).replaceChildren();
+  get('archivedRunbooks').hidden=true;
   resetDetail();
   resetWorkstation();
 }
@@ -606,12 +667,36 @@ for (const [view,[tab]] of Object.entries(deskViews)) get(tab).onclick=()=>setDe
 get('export').onclick=exportQueue;
 get('search').oninput=drawQueue;
 get('order').onchange=drawQueue;
+get('checkModel').onclick=()=>checkModel(true);
 let knowledgeTimer;
 get('knowledgeSearch').oninput=()=>{
   clearTimeout(knowledgeTimer);
   knowledgeTimer=setTimeout(drawKnowledge,180);
 };
 get('knowledgeFault').onchange=drawKnowledge;
+get('runbookForm').onsubmit=async event=>{
+  event.preventDefault();
+  const lab=get('lab').value;
+  const form=event.currentTarget;
+  const button=form.querySelector('button');
+  const {checks,...fields}=Object.fromEntries(new FormData(form));
+  const body={...fields,checks:checks.split(/\r?\n/).map(check=>check.trim()).filter(Boolean)};
+  button.disabled=true;
+  setMessage('runbookMessage','Publishing runbook…');
+  try {
+    await api('/api/operator/knowledge?lab='+encodeURIComponent(lab),{method:'POST',body});
+    form.reset();
+    get('runbookEditor').open=false;
+    setMessage('runbookMessage','');
+    if (get('lab').value===lab && state.view==='operator') {
+      get('knowledgeSearch').value='';
+      get('knowledgeFault').value='';
+      await drawKnowledge();
+      toast('Runbook published and available to the copilot.');
+    }
+  } catch(error) {setMessage('runbookMessage',error.message);}
+  finally {button.disabled=false;}
+};
 for (const button of get('quickPriorityFilter').querySelectorAll('button')) button.onclick=()=>{
   setPriority(button.dataset.priority);
   drawQueue();
@@ -771,6 +856,7 @@ get('reportForm').onsubmit=async event=>{
 try {
   state.config=await api('/api/config');
   get('knowledgeFault').append(...Object.entries(state.config.faults).map(([id,label])=>option(label,id)));
+  get('runbookFault').append(...Object.entries(state.config.faults).map(([id,label])=>option(label,id)));
   get('lab').replaceChildren(...state.config.labs.map(lab=>option(lab.name,lab.id)));
   get('lab').disabled=false;
   get('clearAsset').disabled=true;

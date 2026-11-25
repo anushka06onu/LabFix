@@ -7,7 +7,7 @@
 <title>LabFix | Campus Lab Maintenance</title>
 <link rel="stylesheet" href="/app.css">
 </head>
-<body>
+<body data-view="report">
 <a class="skip" href="#main">Skip to workspace</a>
 
 <!-- Toast notifications container -->
@@ -214,6 +214,16 @@
     </form>
 
     <div id="desk" hidden>
+      <div class="connection-bar">
+        <div class="connection-info">
+          <span class="connection-mark" aria-hidden="true">↯</span>
+          <div><strong>Copilot connection</strong><p id="modelConnectionInfo" class="muted" aria-live="polite">Checking inference…</p></div>
+        </div>
+        <div class="connection-actions">
+          <span class="pill normal" data-model-state>Checking</span>
+          <button class="quiet" id="checkModel" type="button">Check connection</button>
+        </div>
+      </div>
       <!-- Real-time metrics -->
       <div id="metrics" class="metrics" aria-label="Lab operational KPIs"></div>
 
@@ -338,14 +348,33 @@
       </div>
       <section id="knowledgeView" class="panel knowledge-panel" hidden>
         <div class="heading">
-          <div><h2>Knowledge library</h2><p class="muted">Search the runbooks that LabFix uses to ground triage drafts.</p></div>
+          <div><h2>Knowledge library</h2><p class="muted">Review the evidence the copilot can retrieve for this lab.</p></div>
           <span id="knowledgeCount" class="caption" aria-live="polite"></span>
         </div>
+        <details class="runbook-editor" id="runbookEditor">
+          <summary>Publish a lab runbook</summary>
+          <form id="runbookForm">
+            <div class="knowledge-filters">
+              <label for="runbookTitle">Title<input id="runbookTitle" name="title" minlength="5" maxlength="100" required></label>
+              <label for="runbookFault">Fault category<select id="runbookFault" name="fault" required><option value="">Select a category</option></select></label>
+            </div>
+            <label for="runbookSummary">Evidence summary<textarea id="runbookSummary" name="summary" minlength="12" maxlength="500" rows="2" required></textarea></label>
+            <label for="runbookChecks">Diagnostic checks<textarea id="runbookChecks" name="checks" maxlength="1050" rows="3" aria-describedby="runbookChecksHelp" required></textarea></label>
+            <p id="runbookChecksHelp" class="muted">Enter 2–5 distinct checks, one per line.</p>
+            <label for="runbookKeywords">Search keywords <span class="caption">optional</span><input id="runbookKeywords" name="keywords" maxlength="180" placeholder="e.g. flicker, HDMI, মনিটর"></label>
+            <button class="primary" type="submit">Publish to this lab</button>
+            <p id="runbookMessage" class="feedback" role="status"></p>
+          </form>
+        </details>
         <div class="knowledge-filters">
           <label for="knowledgeSearch">Symptoms or keywords<input id="knowledgeSearch" type="search" maxlength="160" placeholder="e.g. monitor flickers"></label>
           <label for="knowledgeFault">Fault category<select id="knowledgeFault"><option value="">All categories</option></select></label>
         </div>
         <div id="knowledgeResults" class="knowledge-results"></div>
+        <details id="archivedRunbooks" class="runbook-editor" hidden>
+          <summary>Archived lab runbooks</summary>
+          <div id="archivedRunbookResults" class="knowledge-results"></div>
+        </details>
       </section>
     </div>
   </section>

@@ -3,14 +3,29 @@ const toolNames = {
   search_runbooks:'Agent searched runbooks',
   read_repair_history:'Agent consulted repair history',
   repair_context:'Included same-workstation repair history',
+  check_lab_patterns:'Agent checked other workstations',
+  lab_context:'Included related workstation reports',
 };
+const suggestedTeam={power:'Hardware',display:'Hardware',input:'Hardware',thermal:'Hardware',
+  network:'Campus IT',software:'Desktop support'};
 
-export function buildCopilotPanel({incident,config,api,el,action,date,toast,onReview}) {
+export function modelBadge(badge,status) {
+  const states={connected:['Model connected','success'],evidence:['Evidence only','normal'],
+    'not-listed':['Model unavailable','high'],unavailable:['Endpoint unavailable','high'],checking:['Checking connection','normal']};
+  const [label,tone]=states[status]||states.checking;
+  badge.textContent=label;
+  badge.className='pill '+tone;
+}
+
+export function buildCopilotPanel({incident,config,connection,api,el,action,date,toast,onReview}) {
   const panel=el('section','','copilot-panel');
   const header=el('div','','copilot-header');
   const heading=el('div');
-  heading.append(el('h3','Triage copilot'),el('p','Draft next checks from runbooks and workstation history.','muted'));
-  header.append(heading,el('span',config.model ? 'LLM configured' : 'Evidence only','pill '+(config.model?'success':'normal')));
+  heading.append(el('h3','Triage copilot'),el('p','Draft cited checks from runbooks and incident evidence.','muted'));
+  const badge=el('span');
+  badge.dataset.modelState='';
+  modelBadge(badge,connection);
+  header.append(heading,badge);
   const controls=el('div','','copilot-controls');
   const select=Object.assign(el('select'),{id:'copilotFocus'});
   for (const [value,label] of Object.entries(config.focus))
@@ -59,7 +74,7 @@ export function buildCopilotPanel({incident,config,api,el,action,date,toast,onRe
     for (const entry of draft.sources) {
       const card=el('details','','source-card');
       card.append(el('summary',entry.id+' · '+entry.title),el('p',entry.summary));
-      if (entry.date) card.append(el('small','Recorded '+date(entry.date),'muted'));
+      if (entry.date) card.append(el('small',(entry.scope==='lab'?'Lab runbook · Published ':'Recorded ')+date(entry.date),'muted'));
       if (entry.checks.length) {
         const list=el('ul');
         for (const check of entry.checks) list.append(el('li',check.text));
@@ -94,7 +109,7 @@ export function buildCopilotPanel({incident,config,api,el,action,date,toast,onRe
     trace.append(el('summary','Retrieval activity'));
     const events=el('ol');
     for (const event of draft.trace) {
-      const label=toolNames[event.tool];
+      const label=toolNames[event.tool]||event.tool;
       const item=el('li');
       item.append(el('strong',label),el('p',[event.protocol,event.query,event.ids.join(', ')||'No matching records'].filter(Boolean).join(' · '),'muted'));
       events.append(item);
@@ -103,7 +118,9 @@ export function buildCopilotPanel({incident,config,api,el,action,date,toast,onRe
     result.replaceChildren(masthead,assessment,steps,evidence,trace);
     if (draft.reviewed) {
       const review=el('div','','draft-review');
-      review.append(el('h4','Review recorded'),el('p',draft.review_note),el('small',date(draft.reviewed),'muted'));
+      review.append(el('h4',draft.handoff?'Review and handoff recorded':'Review recorded'),el('p',draft.review_note));
+      if (draft.handoff) review.append(el('p','Assigned to '+draft.handoff.assignee+' · '+draft.handoff.priority+' priority','handoff-summary'));
+      review.append(el('small',date(draft.reviewed),'muted'));
       result.append(review);
     } else if (draft.stale) {
       result.append(el('p','New incident activity arrived. Generate an updated draft before recording a review.','draft-stale'));
@@ -120,18 +137,45 @@ export function buildCopilotPanel({incident,config,api,el,action,date,toast,onRe
     const save=el('button','Record review','quiet');
     const feedback=el('p','','feedback');
     feedback.setAttribute('role','status');
-    form.append(label,note,save,feedback);
+    const handoffToggle=Object.assign(el('input'),{type:'checkbox',id:'startHandoff'});
+    const details=el('div','','handoff-fields edit-grid');
+    details.hidden=true;
+    const assignee=Object.assign(el('input'),{id:'handoffAssignee',value:incident.assignee||suggestedTeam[incident.fault]||'',
+      required:true,maxLength:60,disabled:true});
+    const priority=Object.assign(el('select'),{id:'handoffPriority',disabled:true});
+    for (const value of ['normal','high','urgent']) priority.append(Object.assign(el('option',value),{value}));
+    priority.value=incident.priority;
+    const teamLabel=Object.assign(el('label','Assign to'),{htmlFor:assignee.id});
+    teamLabel.append(assignee);
+    const priorityLabel=Object.assign(el('label','Priority'),{htmlFor:priority.id});
+    priorityLabel.append(priority);
+    details.append(teamLabel,priorityLabel);
+    handoffToggle.onchange=()=>{
+      const enabled=handoffToggle.checked;
+      details.hidden=!enabled;
+      assignee.disabled=!enabled;
+      priority.disabled=!enabled;
+      save.textContent=enabled?'Record review and start work':'Record review';
+    };
+    form.append(label,note);
+    if (incident.asset && incident.fault!=='other' && ['open','working'].includes(incident.status)) {
+      const toggleLabel=Object.assign(el('label','','handoff-toggle'),{htmlFor:handoffToggle.id});
+      toggleLabel.append(handoffToggle,el('span','Assign and move to In progress'));
+      form.append(toggleLabel,details);
+    }
+    form.append(save,feedback);
     form.onsubmit=async event=>{
       event.preventDefault();
       save.disabled=true;
       setStatus(feedback,'Saving review…');
       try {
-        const updated=await api(path+'/'+draft.id,{method:'PATCH',body:{note:note.value}});
+        const handoff=handoffToggle.checked ? {assignee:assignee.value,priority:priority.value} : null;
+        const updated=await api(path+'/'+draft.id,{method:'PATCH',body:{note:note.value,handoff}});
         drafts=drafts.map(item=>item.id===draft.id?updated:item);
         if (panel.isConnected) {
           onReview(updated);
           if (active===draft.id) choose(draft.id);
-          toast('Operator review recorded.');
+          toast(updated.handoff?'Handoff recorded. The repair is in progress.':'Operator review recorded.');
         }
       } catch (error) {
         setStatus(feedback,error.message);
