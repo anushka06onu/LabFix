@@ -1,7 +1,10 @@
 FROM node:24-bookworm-slim
 WORKDIR /app
-COPY --chown=node:node package.json server.mjs store.mjs matching.mjs ./
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
+COPY --chown=node:node server.mjs store.mjs matching.mjs knowledge.mjs copilot.mjs ./
 COPY --chown=node:node public ./public
+COPY --chown=node:node eval/results.json eval/challenge-results.json ./eval/
 RUN mkdir /data && chown node:node /data
 USER node
 ENV HOST=0.0.0.0 PORT=8080 LABFIX_DB=/data/labfix.sqlite

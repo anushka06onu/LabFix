@@ -2,11 +2,22 @@ services:
   labfix:
     build: .
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${LABFIX_PORT:-8080}:8080"
     environment:
       LABFIX_OPERATOR_TOKEN: ${LABFIX_OPERATOR_TOKEN:?set a strong operator token}
+      LABFIX_MODEL: ${LABFIX_MODEL:-}
+      LABFIX_MODEL_URL: ${LABFIX_MODEL_URL:-}
+      LABFIX_MODEL_TOKEN: ${LABFIX_MODEL_TOKEN:-}
     volumes:
       - labfix-data:/data
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
 volumes:
   labfix-data:
