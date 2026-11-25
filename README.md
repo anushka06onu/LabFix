@@ -17,10 +17,10 @@ On PowerShell, run `$env:LABFIX_DEMO = '1'` before `npm start`. Open [http://127
 
 1. Open **Report** in **Innovation Lab**. The map identifies workstations with an active incident or a post-repair recurrence. Try the Bangla and Banglish example buttons to see how the same workstation and fault are identified before submitting.
 2. Submit a report and choose **Track this report**. The private receipt shows the current repair stage and timestamps without exposing repair notes or student report text. Use **Copy receipt code** to save the code. Recent lookups are retained in memory until the page is refreshed or closed.
-3. In **Operator desk**, open the **PC-17** sample recurrence. In **Triage copilot**, select **Recurring fault** and generate a draft. Inspect its citations, open **Retrieval activity**, and record an operator review. Use **Incident details** to assign the repair or change status, and **Reports & history** for the original reports and audit log. A matching report submitted within 30 days reopens a resolved incident, and the original receipt follows the new status.
+3. In **Operator desk**, open the **PC-17** sample recurrence. Select **Recurring fault** and generate a draft. Inspect its citations and **Retrieval activity**. Record an operator review or choose **Assign and move to In progress** to start a handoff. **Reports & history** shows the audit entries. A matching report submitted within 30 days reopens a resolved incident, and the original receipt follows the new status.
 4. Submit “The screen is blank near the window.” Confirm the location or merge it into an active incident from the **Needs review** queue. A merged report retains its receipt and history.
 5. Select **Response overdue** to see incidents waiting past their first-response target. In **Workstations**, open **PC-06** to see an availability restriction and its internal history. Return it to service with a note, then check the student map.
-6. Open **Knowledge library** to search the versioned runbooks, or **Analytics** for report volume, fault categories, and workstation recurrences. Export the filtered queue as CSV. Open **Matching evaluation** in the footer to compare the three intake matchers by language.
+6. Open **Knowledge library** to search the bundled runbooks or publish guidance for the selected lab. Archived runbooks stop appearing in retrieval while older drafts keep their evidence snapshots. Open **Analytics** to explore report volume, fault categories, and workstation recurrences, or use **Matching evaluation** in the footer to compare the intake matchers by language.
 
 The responsive interface follows the browser's reduced-motion preference. Demo reports, workstation restrictions, and dates are synthetic. Use the production configuration for actual campus data.
 
@@ -33,13 +33,24 @@ llama-server --model /path/to/model.gguf --alias labfix-local --host 127.0.0.1 -
 LABFIX_DEMO=1 LABFIX_MODEL=labfix-local LABFIX_MODEL_URL=http://127.0.0.1:8765/v1 npm start
 ```
 
-Set `LABFIX_MODEL_TOKEN` when the inference endpoint requires bearer authentication. The operator workspace shows the configured model, and each completed draft reports whether the model actually generated it. A missing, timed-out, or invalid model response yields a labeled evidence draft.
+Set `LABFIX_MODEL_TOKEN` when the inference endpoint requires bearer authentication. **Copilot connection** probes whether the endpoint lists the configured model. A completed draft records whether model inference actually ran. A missing, timed-out, or invalid response yields a labeled evidence draft.
 
-1. SQLite FTS5 retrieves runbooks using the ticket category and symptom text. The copilot exposes two read-only tools to the model, runbook search and repair-history lookup. Repair history is scoped to the same lab, workstation, and fault class.
+1. SQLite FTS5 retrieves bundled and lab-published runbooks using the ticket category and symptom text. The copilot exposes three read-only tools for runbook search, repair-history lookup, and related lab reports. Repair history is scoped to the same workstation and fault within the lab. Related reports use a 72-hour window and a same-lab fault category.
 2. The model selects an evidence tool through a native call. If the endpoint completes that request without a valid call, the model can select the same allowed tools through a constrained JSON response. After retrieval, the model selects a runbook and orders its diagnostic checks. The server verifies the cited IDs and renders the primary assessment and checks from the retrieved sources. The model may also supply a follow-up question.
-3. Each draft stores the retrieval activity and source excerpts used to prepare it. An operator can record a review note on a current draft. Incident edits and new reports invalidate unfinished reviews. Staff change the incident status using the usual incident controls.
+3. Each draft stores its retrieval activity and source excerpts. Operators can record a review alone or assign the repair and set it to In progress in the same transaction. A new report or incident edit invalidates an old draft. An archived cited runbook prevents a handoff from that draft.
 
 The configured endpoint receives bounded ticket and evidence excerpts. The app removes common e-mail addresses, links, and long numeric identifiers from excerpts. Use a trusted private inference endpoint for real lab data. Allow at least 75 seconds for inference requests at your reverse proxy.
+
+```mermaid
+flowchart LR
+    Intake["Multilingual report"] --> Incident["Incident record"]
+    Incident --> Copilot["Triage copilot"]
+    Sources[("Runbooks and repair history")] --> Copilot
+    Copilot <-->|"Tool selection and draft"| Model["Local LLM"]
+    Copilot --> Review["Citations and operator review"]
+    Review -->|Approved handoff| Incident
+    Incident --> Receipt["Private student receipt"]
+```
 
 ## Deployment
 
@@ -56,6 +67,8 @@ curl -f http://127.0.0.1:8080/healthz
 ```
 
 Keep the token in a secret manager before closing the shell. For subsequent launches, inject the same token or deliberately rotate it. Compose publishes on loopback and persists SQLite in the `labfix-data` volume. Set `LABFIX_PORT` to change the host port and point your HTTPS reverse proxy at that port. Set the optional model variables to reach a private inference service from the container. The container runs as the unprivileged Node user with a read-only root filesystem. Its volume holds the SQLite database and write-ahead log.
+
+The GitHub Actions workflow builds and starts the Compose service and runs the production smoke test against a disposable database. To run the smoke test against your own disposable instance, use `npm run smoke:production -- http://127.0.0.1:8080/` with the instance's operator token set. Add `--require-model` to require a connected model and an actual LLM draft. The smoke test writes synthetic reports and a lab runbook.
 
 ### Direct Node service
 
@@ -119,6 +132,15 @@ A pilot could start in one lab and compare first-pass report routing against lab
 | `eval/` | Benchmark cases and reproducible results |
 | `test/` | Node test suite and HTTP integration |
 | `Dockerfile`, `compose.yml` | Container and persistent volume |
+| `scripts/production-smoke.mjs` | Production report, scoped retrieval, handoff, receipt, and recurrence check |
+| `public/lab-hero.jpg` | Student dashboard photograph generated with the built-in image tool |
+
+<details>
+<summary>Hero image prompt</summary>
+
+Use case: photorealistic-natural. Asset: panoramic hero photograph for a professional university computer laboratory maintenance dashboard. Inside an authentic, tidy university teaching computer lab in Dhaka, framed at desk height, a row of black flat computer monitors recedes on the right with one crisp monitor in the foreground and clean desks. No people, logos, or legible text. Restrained teal and deep evergreen shadows, warm window daylight from the far right, subtle amber highlights, natural lens and materials, premium architectural editorial photography. Landscape 3:2 framing. The photograph will be cropped wide on the right side of a hero, so place the strongest monitor and perspective detail toward the center and right, with dark uncluttered tonal transitions at the left edge. Keep it realistic and calm, avoid sci-fi graphics or generic stock-photo effects.
+
+</details>
 
 ### Portfolio description
 
