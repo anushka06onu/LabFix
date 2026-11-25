@@ -1,6 +1,6 @@
 import {DatabaseSync} from 'node:sqlite';
 
-export const libraryVersion = '1.0';
+export const libraryVersion = '1.1';
 const references = [
   ['KB-P01','power','Unexpected shutdown or restart',
     'power restarts restart shutdown turns off বিদ্যুৎ বন্ধ রিস্টার্ট off hoy power cable',
@@ -59,21 +59,40 @@ const references = [
 
 export const knowledge = references.map(({keywords,...reference})=>reference);
 
-export function openKnowledge() {
+export function labRunbook(row) {
+  const id='LAB-'+row.id;
+  return {...row,id,checks:row.checks.map((text,i)=>({id:id+'.'+(i+1),text}))};
+}
+
+export function openKnowledge(published=[]) {
   const db = new DatabaseSync(':memory:');
-  db.exec("CREATE VIRTUAL TABLE reference_search USING fts5(id UNINDEXED,fault UNINDEXED,title,keywords,summary,tokenize='porter unicode61')");
-  const insert = db.prepare('INSERT INTO reference_search VALUES(?,?,?,?,?)');
-  for (const entry of references) insert.run(entry.id,entry.fault,entry.title,entry.keywords,entry.summary);
+  db.exec("CREATE VIRTUAL TABLE reference_search USING fts5(id UNINDEXED,lab UNINDEXED,fault UNINDEXED,title,keywords,summary,tokenize='porter unicode61')");
+  const insert = db.prepare('INSERT INTO reference_search VALUES(?,?,?,?,?,?)');
+  const remove = db.prepare('DELETE FROM reference_search WHERE id=?');
+  for (const entry of references) insert.run(entry.id,'',entry.fault,entry.title,entry.keywords,entry.summary);
   const match = db.prepare(`SELECT id FROM reference_search
-    WHERE reference_search MATCH ? AND (? IS NULL OR fault=?)
-    ORDER BY bm25(reference_search,0,0,3,2,1),id LIMIT 4`);
+    WHERE reference_search MATCH ? AND (lab='' OR lab=?) AND (? IS NULL OR fault=?)
+    ORDER BY bm25(reference_search,0,0,0,3,2,1),lab DESC,id LIMIT ?`);
   const byId = new Map(knowledge.map(entry=>[entry.id,entry]));
+  function register(row) {
+    const entry=labRunbook(row);
+    remove.run(entry.id);
+    byId.delete(entry.id);
+    if (entry.archived==null) {
+      insert.run(entry.id,entry.lab,entry.fault,entry.title,entry.keywords,entry.summary);
+      byId.set(entry.id,entry);
+    }
+    return entry;
+  }
+  for (const row of published) register(row);
+  const list = (lab,fault) => [...byId.values()].filter(entry=>(!entry.lab||entry.lab===lab)&&(!fault||entry.fault===fault));
   return {
-    search(query, fault=null, {fallback=true}={}) {
+    list,register,
+    search(query, fault=null, {fallback=true,lab=null,limit=4}={}) {
       const words = query.normalize('NFKC').toLowerCase().match(/[\p{L}\p{M}\p{N}]{2,32}/gu) || [];
       const terms = [...new Set(words)].slice(0,18).map(word=>'"'+word+'"').join(' OR ');
-      const hits = terms ? match.all(terms,fault,fault).map(row=>byId.get(row.id)) : [];
-      return hits.length || !fault || !fallback ? hits : knowledge.filter(entry=>entry.fault===fault);
+      const hits=terms ? match.all(terms,lab,fault,fault,limit).map(row=>byId.get(row.id)) : [];
+      return hits.length || !fault || !fallback ? hits : list(lab,fault).slice(0,limit);
     },
     close:()=>db.close(),
   };
