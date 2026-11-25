@@ -25,17 +25,20 @@ try {
   for (const [name,fault,focus,description,expected] of cases) {
     const id=name==='unconfirmed seat'?null:'PC-17';
     const repairs=focus==='recurrence'?[{id:7,incident:1,note:'Replaced a loose power cable and verified a clean boot.',created:1}]:[];
-    const result=await run({fault,asset:id,repeats:repairs.length,repairs,reports:[{description}]},focus,AbortSignal.timeout(65_000));
+    const related=name==='shared outage'?[{asset:'PC-04'},{asset:'PC-06'}]:[];
+    const result=await run({id:rows.length+1,fault,asset:id,repeats:repairs.length,repairs,related,reports:[{description}]},
+      focus,AbortSignal.timeout(65_000));
     const found=result.trace[0].ids;
     const baseline=knowledge.find(item=>item.fault===fault)?.id;
     const valid=result.checks.every(check=>result.sources.find(source=>source.id===check.source)?.checks.some(item=>item.id===check.id));
     rows.push({name,expected,categoryOnly:baseline===expected,top1:found[0]===expected,top2:found.includes(expected),
-      cited:result.citations.includes(expected),mode:result.mode,validChecks:valid,ms:result.durationMs});
+      cited:result.citations.includes(expected),mode:result.mode,validChecks:valid,
+      scope:related.length ? result.sources.some(source=>source.type==='pattern') : undefined,ms:result.durationMs});
   }
   console.table(rows);
   const totals=Object.fromEntries(['categoryOnly','top1','top2','cited','validChecks'].map(key=>[key,rows.filter(row=>row[key]).length]));
   console.log(JSON.stringify({authoredCases:cases.length,model:inference?.id??null,modelDrafts:rows.filter(row=>row.mode==='llm').length,...totals},null,2));
-  if (!rows.every(row=>row.validChecks) || (inference && !rows.some(row=>row.mode==='llm'))) process.exitCode=1;
+  if (!rows.every(row=>row.validChecks && row.scope!==false) || (inference && !rows.some(row=>row.mode==='llm'))) process.exitCode=1;
 } finally {
   index.close();
 }
